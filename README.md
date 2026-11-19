@@ -131,7 +131,7 @@ go build .
 ### Direct Install
 
 ```bash
-go install gitlab.com/specterog/maxzip@v0.1.2
+go install gitlab.com/specterog/maxzip@latest
 ```
 
 ## Quick start
