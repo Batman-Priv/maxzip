@@ -1,4 +1,4 @@
-module gitlab.con/specterog/maxzip
+module gitlab.com/specterog/maxzip
 
 go 1.21
 
