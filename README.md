@@ -244,7 +244,7 @@ maxzip comment -i archive.mzp
 ## Verifying this build
 
 ```bash
-go build -o maxzip ./cmd/maxzip
+go build .
 maxzip selftest
 ```
 
