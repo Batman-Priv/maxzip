@@ -224,28 +224,3 @@ Said plainly, not buried in fine print:
 go test ./...        # unit tests: crypto, path safety, tamper/truncation, BCJ, delta
 maxzip selftest      # end-to-end round trips through every mode
 ```
-
-## Project layout
-
-```
-gitlab.com/specterog/maxzip/
-├── go.mod
-├── README.md
-├── cmd/gitlab.com/specterog/maxzip/main.go
-└── internal/
-    ├── archive/       (pack.go, unpack.go)
-    ├── block/
-    ├── compressor/    (compressor.go, benchmark.go)
-    ├── cryptoutil/
-    ├── dedup/         (chunker.go, blockbuilder.go)
-    ├── delta/
-    ├── dictionary/
-    ├── format/
-    ├── fsutil/
-    ├── preprocess/
-    ├── progress/
-    ├── selftest/
-    ├── smart/
-    ├── ui/
-    └── volume/
-```
