@@ -1,22 +1,4 @@
-// Package delta implements a simplified rsync-style binary diff: encode a
-// target byte slice as a series of copy-from-reference and literal-bytes
-// instructions against a reference byte slice, and decode it back.
-//
-// This is NOT the bsdiff algorithm (no suffix array, no byte-exact
-// longest-match search) - it's the same fundamental idea rsync itself
-// uses: fixed-size reference blocks, indexed by a rolling checksum so the
-// target can be scanned for matches at any byte offset, with a strong
-// hash to confirm a weak-checksum hit before trusting it. It's simpler
-// than bsdiff and easier to verify correct by direct inspection, at the
-// cost of not finding byte-exact matches shorter than one block or
-// misaligned in ways a full suffix-array search would catch.
-//
-// STATUS: wired into pack/unpack via "-delta" (see internal/block, which
-// groups similar files inside a solid block into reference/delta chains,
-// and internal/archive/deltastate.go, which rebuilds them on extraction).
-// Everything read back from an archive goes through the bounded
-// DecodeMax/Unmarshal below, so a crafted delta can't allocate or produce
-// more than the caller allows.
+
 package delta
 
 import (
@@ -27,13 +9,8 @@ import (
 	"io"
 )
 
-// modBase is the same modulus Adler-32 uses - a prime just under 2^16, so
-// the two half-sums pack into a uint32 without overlapping.
 const modBase uint32 = 65521
 
-// DefaultBlockSize is a reasonable default for typical document/config/
-// database-file sized deltas. Smaller blocks find more matches in heavily
-// edited files at the cost of a larger delta encoding overhead per match.
 const DefaultBlockSize = 2048
 
 type rollingHash struct {
@@ -55,7 +32,6 @@ func (h *rollingHash) sum() uint32 {
 	return (h.b << 16) | (h.a & 0xffff)
 }
 
-// roll advances the window by one byte: oldByte leaves, newByte enters.
 func (h *rollingHash) roll(oldByte, newByte byte) {
 	h.a = (h.a + modBase - uint32(oldByte)) % modBase
 	h.a = (h.a + uint32(newByte)) % modBase
@@ -71,8 +47,6 @@ const (
 	Literal
 )
 
-// Op is one instruction in a delta: either copy Length bytes from the
-// reference starting at RefOffset, or emit Data literally.
 type Op struct {
 	Kind      Kind
 	RefOffset int
@@ -85,8 +59,6 @@ type refEntry struct {
 	strong [32]byte
 }
 
-// Encode diffs target against reference, producing a sequence of Ops that
-// Decode(reference, ops) reconstructs target from exactly.
 func Encode(reference, target []byte, blockSize int) []Op {
 	if blockSize <= 0 {
 		blockSize = DefaultBlockSize
@@ -164,14 +136,10 @@ func Encode(reference, target []byte, blockSize int) []Op {
 	return ops
 }
 
-// Decode reconstructs the target bytes from reference and a sequence of
-// Ops produced by Encode.
 func Decode(reference []byte, ops []Op) ([]byte, error) {
 	return DecodeMax(reference, ops, -1)
 }
 
-// DecodeMax is Decode with an upper bound on the output size (maxOut < 0
-// means unlimited). Use it on anything that came out of an archive.
 func DecodeMax(reference []byte, ops []Op, maxOut int) ([]byte, error) {
 	var out []byte
 	for _, op := range ops {
@@ -196,8 +164,6 @@ func DecodeMax(reference []byte, ops []Op, maxOut int) ([]byte, error) {
 	return out, nil
 }
 
-// Marshal/Unmarshal serialize Ops to/from a byte blob, for storing a delta
-// as archive content once this is wired into the CLI.
 func Marshal(ops []Op) []byte {
 	var buf bytes.Buffer
 	binary.Write(&buf, binary.BigEndian, uint32(len(ops)))
@@ -221,7 +187,7 @@ func Unmarshal(data []byte) ([]Op, error) {
 	if err := binary.Read(r, binary.BigEndian, &count); err != nil {
 		return nil, err
 	}
-	// Every op takes at least 5 bytes, so a larger count is impossible.
+	
 	if uint64(count)*5 > uint64(r.Len()) {
 		return nil, fmt.Errorf("delta: op count %d is impossible for %d bytes of data", count, r.Len())
 	}

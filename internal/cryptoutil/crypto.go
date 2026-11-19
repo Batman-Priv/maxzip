@@ -1,19 +1,4 @@
-// Package cryptoutil provides password-based archive encryption:
-// Argon2id key derivation + chunked AES-256-GCM.
-//
-// Nonce safety: every encrypted stream (one per block, plus one for the
-// footer) starts with a fresh random 128-bit stream ID, and a per-stream
-// sub-key is derived from the master key with HMAC-SHA256(master, ID).
-// Because each stream therefore has its own AES key, the plain counter
-// nonce inside it can never collide with a nonce used under any other key -
-// unlike a scheme with a short random nonce prefix under one shared key,
-// where a birthday collision (and with it the catastrophic loss of GCM
-// confidentiality/authenticity) becomes plausible on large archives.
-//
-// Every chunk is also authenticated together with its position and a
-// "final" flag, so reordering, dropping or truncating chunks of a stream is
-// detected, and with caller-supplied associated data (the stream's role and
-// block index), so a stream can't be transplanted somewhere else.
+
 package cryptoutil
 
 import (
@@ -34,31 +19,23 @@ const (
 	nonceSize     = 12
 	tagSize       = 16
 	streamIDSize  = 16
-	chunkPlainMax = 4 << 20 // 4 MiB of plaintext per encrypted chunk
+	chunkPlainMax = 4 << 20 
 )
 
-// KDFParams are the Argon2id cost parameters. They are stored in the archive
-// header so they can be raised in future versions without breaking old
-// archives.
 type KDFParams struct {
-	Time    uint32 // passes
-	MemKiB  uint32 // memory in KiB
+	Time    uint32 
+	MemKiB  uint32 
 	Threads uint8
 }
 
-// DefaultKDF is a deliberately stronger-than-minimum setting (3 passes,
-// 128 MiB, 4 lanes).
 var DefaultKDF = KDFParams{Time: 3, MemKiB: 128 * 1024, Threads: 4}
 
-// Upper bounds accepted when READING an archive, so a crafted header can't
-// make the decryptor allocate absurd amounts of memory or burn CPU forever.
 const (
 	maxKDFTime    = 64
-	maxKDFMemKiB  = 2 * 1024 * 1024 // 2 GiB
+	maxKDFMemKiB  = 2 * 1024 * 1024 
 	maxKDFThreads = 64
 )
 
-// Validate rejects parameters that are zero or unreasonably large.
 func (p KDFParams) Validate() error {
 	if p.Time < 1 || p.Time > maxKDFTime {
 		return fmt.Errorf("unsupported KDF time cost %d", p.Time)
@@ -72,8 +49,6 @@ func (p KDFParams) Validate() error {
 	return nil
 }
 
-// DeriveKey turns a password + random salt into a 32-byte master key using
-// Argon2id (memory-hard, resistant to GPU brute-forcing).
 func DeriveKey(password string, salt []byte, p KDFParams) ([]byte, error) {
 	if err := p.Validate(); err != nil {
 		return nil, err
@@ -81,13 +56,10 @@ func DeriveKey(password string, salt []byte, p KDFParams) ([]byte, error) {
 	return argon2.IDKey([]byte(password), salt, p.Time, p.MemKiB, p.Threads, 32), nil
 }
 
-// Cipher holds the master key of an archive. It is safe for concurrent use:
-// every stream derives its own AEAD from it.
 type Cipher struct {
 	master []byte
 }
 
-// NewCipher wraps a 32-byte master key.
 func NewCipher(key []byte) (*Cipher, error) {
 	if len(key) != 32 {
 		return nil, errors.New("cryptoutil: master key must be 32 bytes")
@@ -114,7 +86,6 @@ func chunkNonce(counter uint64) []byte {
 	return nonce
 }
 
-// chunkAAD = caller AAD || counter || final flag.
 func chunkAAD(aad []byte, counter uint64, final bool) []byte {
 	out := make([]byte, 0, len(aad)+9)
 	out = append(out, aad...)
@@ -129,10 +100,6 @@ func chunkAAD(aad []byte, counter uint64, final bool) []byte {
 	return out
 }
 
-// EncryptWriter encrypts data in fixed-size chunks and writes
-// [4-byte big-endian ciphertext length][ciphertext+tag] records, preceded by
-// the 16-byte random stream ID. Close MUST be called: it emits the final
-// (possibly empty) chunk that marks the end of the stream.
 type EncryptWriter struct {
 	w       io.Writer
 	aead    cipher.AEAD
@@ -142,8 +109,6 @@ type EncryptWriter struct {
 	closed  bool
 }
 
-// NewEncryptWriter starts a new stream. aad binds the stream to its context
-// (for example "block" + index); the reader must supply the same value.
 func NewEncryptWriter(w io.Writer, c *Cipher, aad []byte) (*EncryptWriter, error) {
 	id := make([]byte, streamIDSize)
 	if _, err := rand.Read(id); err != nil {
@@ -165,8 +130,7 @@ func (e *EncryptWriter) Write(p []byte) (int, error) {
 	}
 	total := len(p)
 	for len(p) > 0 {
-		// A full buffer is only flushed once more data arrives, so the last
-		// chunk of the stream is always flushed by Close and marked final.
+		
 		if len(e.buf) == chunkPlainMax {
 			if err := e.flushChunk(false); err != nil {
 				return 0, err
@@ -196,7 +160,6 @@ func (e *EncryptWriter) flushChunk(final bool) error {
 	return err
 }
 
-// Close writes the final chunk. It is idempotent.
 func (e *EncryptWriter) Close() error {
 	if e.closed {
 		return nil
@@ -205,7 +168,6 @@ func (e *EncryptWriter) Close() error {
 	return e.flushChunk(true)
 }
 
-// DecryptReader reverses EncryptWriter, presenting a plain io.Reader.
 type DecryptReader struct {
 	r       io.Reader
 	aead    cipher.AEAD
@@ -247,7 +209,7 @@ func (d *DecryptReader) readChunk() error {
 	var lenBuf [4]byte
 	if _, err := io.ReadFull(d.r, lenBuf[:]); err != nil {
 		if err == io.EOF {
-			// The stream ended without its final chunk: truncated.
+			
 			return errors.New("decryption failed: stream is truncated")
 		}
 		return err
@@ -260,9 +222,7 @@ func (d *DecryptReader) readChunk() error {
 	if _, err := io.ReadFull(d.r, ct); err != nil {
 		return err
 	}
-	// A non-final chunk always carries exactly chunkPlainMax bytes; anything
-	// shorter must be the final one. Try the most likely interpretation
-	// first, then the other, so the final flag is authenticated either way.
+	
 	final := ctLen != chunkPlainMax+tagSize
 	nonce := chunkNonce(d.counter)
 	pt, err := d.aead.Open(nil, nonce, ct, chunkAAD(d.aad, d.counter, final))

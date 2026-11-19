@@ -26,15 +26,11 @@ type UnpackOptions struct {
 	Input    string
 	Output   string
 	Password string
-	OnlyFile string // if set, extract only this one file
+	OnlyFile string 
 	Verify   bool
-	Verbose  bool // print per-file detail in addition to the progress bar
+	Verbose  bool 
 }
 
-// ReadComment opens the archive (following multi-volume parts if needed)
-// and returns its comment, if any. No password is required - the comment
-// lives in the plaintext header, the same way zip/rar comments are
-// viewable without one.
 func ReadComment(path string) (comment string, has bool, err error) {
 	ar, err := volume.OpenArchiveParts(path)
 	if err != nil {
@@ -49,16 +45,11 @@ func ReadComment(path string) (comment string, has bool, err error) {
 	return hdr.Comment, hdr.Flags&format.FlagComment != 0, nil
 }
 
-// EntryInfo describes one file in an archive's listing.
 type EntryInfo struct {
 	Name string
 	Size int64
 }
 
-// ListEntries reads the archive's footer and returns every file's name and
-// original size, without extracting anything. For an encrypted archive the
-// footer (file names, sizes, hashes) is itself encrypted, so the password
-// is required; the comment in the header stays readable without it.
 func ListEntries(path, password string) ([]EntryInfo, error) {
 	ar, err := volume.OpenArchiveParts(path)
 	if err != nil {
@@ -95,9 +86,6 @@ type TestOptions struct {
 	Password string
 }
 
-// Test verifies every checksum in the archive (header, footer, every
-// block, every file) without writing anything to disk. Returns nil if
-// everything checks out, or an error describing the first problem found.
 func Test(opt TestOptions) error {
 	ar, err := volume.OpenArchiveParts(opt.Input)
 	if err != nil {
@@ -282,9 +270,6 @@ func Unpack(opt UnpackOptions) error {
 	return extractAll(ar, idx, opt, aead, hdr.Dict, bar)
 }
 
-// ---------- shared chunked-storage types (dedup mode and normal mode's
-// automatic big-file handling both use these) ----------
-
 type chunkEntry struct {
 	hash       [32]byte
 	blockIndex uint32
@@ -296,12 +281,11 @@ type dedupFileEntry struct {
 	name     string
 	sha      [32]byte
 	origSize uint64
-	mode     uint32 // permission bits; 0 means "not recorded"
-	modTime  int64  // unix seconds; 0 means "not recorded"
+	mode     uint32 
+	modTime  int64  
 	chunkIdx []uint32
 }
 
-// readChunkedSection is the mirror of writeChunkedSection in pack.go.
 func readChunkedSection(r *bytes.Reader) (chunkTable []chunkEntry, blockOffsets []int64, fileList []dedupFileEntry, err error) {
 	var chunkCount uint32
 	if err = binary.Read(r, binary.BigEndian, &chunkCount); err != nil {
@@ -426,8 +410,6 @@ func readDedupBlockHeader(ar *volume.MultiPartReader, offset int64) (uncompSize,
 	return
 }
 
-// checkPayloadLen refuses a block payload longer than what is left of the
-// archive, before anything is allocated for it.
 func checkPayloadLen(ar *volume.MultiPartReader, payloadLen uint64) error {
 	pos, err := ar.Seek(0, io.SeekCurrent)
 	if err != nil {
@@ -439,8 +421,6 @@ func checkPayloadLen(ar *volume.MultiPartReader, payloadLen uint64) error {
 	return nil
 }
 
-// blockCache keeps the last few decompressed chunk-blocks in memory, since
-// consecutive files' chunks tend to cluster in the same or nearby blocks.
 type blockCache struct {
 	cap   int
 	order []uint32
@@ -482,8 +462,7 @@ func (c *blockCache) get(ar *volume.MultiPartReader, offsets []int64, idx uint32
 	if err != nil {
 		return nil, err
 	}
-	// Never inflate past what the block header promised: a decompression
-	// bomb is cut off after uncompSize+1 bytes.
+	
 	data, err := io.ReadAll(io.LimitReader(decompressed, int64(uncompSize)+1))
 	compressor.CloseDecompressor(decompressed)
 	if err != nil {
@@ -503,9 +482,6 @@ func (c *blockCache) get(ar *volume.MultiPartReader, offsets []int64, idx uint32
 	return data, nil
 }
 
-// reconstructChunkedFile writes one file by concatenating its chunks in
-// order, verifying the whole-file checksum at the end, then restoring
-// permission bits and modification time if they were recorded.
 func reconstructChunkedFile(ar *volume.MultiPartReader, cache *blockCache, fe dedupFileEntry, chunkTable []chunkEntry, blockOffsets []int64, outputDir string, aead *cryptoutil.Cipher, verify bool) error {
 	outPath, err := safeJoin(outputDir, fe.name)
 	if err != nil {
@@ -556,8 +532,6 @@ func reconstructChunkedFile(ar *volume.MultiPartReader, cache *blockCache, fe de
 	return nil
 }
 
-// ---------- normal-mode (tar-block) footer + extraction ----------
-
 type footerFileEntry struct {
 	name       string
 	blockIndex uint32
@@ -574,13 +548,9 @@ type footerIndex struct {
 	emptyDirs    []string
 }
 
-// readFooter locates, authenticates (SHA-256 of the stored bytes, plus
-// AES-GCM for encrypted archives), decrypts and parses the footer index,
-// then cross-checks every reference in it against the archive's real size
-// so later code can index into it without bounds surprises.
 func readFooter(ar *volume.MultiPartReader, aead *cryptoutil.Cipher) (*footerIndex, error) {
 	total := ar.Size()
-	const trailer = 32 + 8 // footer SHA-256 + footer offset
+	const trailer = 32 + 8 
 	if total < trailer {
 		return nil, fmt.Errorf("archive too small to contain an index")
 	}
@@ -646,9 +616,6 @@ func minInt64(a, b int64) int64 {
 	return b
 }
 
-// checkCount guards a count read from the archive before allocating a slice
-// for it: each element needs at least minSize bytes, so a count larger than
-// the remaining data / minSize can only be corruption or an attack.
 func checkCount(r *bytes.Reader, n uint32, minSize int, what string) error {
 	if uint64(n)*uint64(minSize) > uint64(r.Len()) {
 		return fmt.Errorf("corrupted archive index: %s count %d is impossible", what, n)
@@ -727,8 +694,6 @@ func parseFooter(tr *bytes.Reader) (*footerIndex, error) {
 	}, nil
 }
 
-// validate cross-checks every index/offset in the footer. footerOffset is
-// where the footer begins: every block must lie before it.
 func (idx *footerIndex) validate(footerOffset int64) error {
 	badOffsets := func(offs []int64, what string) error {
 		for _, o := range offs {
@@ -764,10 +729,6 @@ func (idx *footerIndex) validate(footerOffset int64) error {
 	return nil
 }
 
-// blockFlagDict marks (in the high bit of a block's algorithm byte) that the
-// block was compressed WITH the shared dictionary prefix. A block may have
-// been built without it (when that turned out smaller), so the reader must
-// be told per block rather than assuming from the header.
 const blockFlagDict = 0x80
 
 func readBlockHeader(ar *volume.MultiPartReader, offset int64) (fileCount uint32, uncompSize uint64, payloadLen uint64, blockSHA [32]byte, algo compressor.Algo, usedDict bool, err error) {
@@ -833,10 +794,7 @@ func openBlockTar(ar *volume.MultiPartReader, blockIndex uint32, payloadLen uint
 	if err != nil {
 		return nil, nil, err
 	}
-	// See block.Build: the dictionary is a raw byte prefix written directly
-	// into the block's plaintext stream (zstd only), not a library-level
-	// dictionary - so decoding it back out is just discarding that many
-	// bytes before the tar content starts.
+	
 	if algo == compressor.Zstd && len(dict) > 0 {
 		if _, err := io.CopyN(io.Discard, decompressed, int64(len(dict))); err != nil {
 			compressor.CloseDecompressor(decompressed)
@@ -967,8 +925,7 @@ func extractSingleFile(ar *volume.MultiPartReader, idx *footerIndex, opt UnpackO
 					return terr
 				}
 				if hdr.Name != target.name {
-					// Earlier members of a delta chain must still be
-					// rebuilt (in memory) - the target may depend on them.
+					
 					if isChain(hdr) {
 						if sz, known := sizes[hdr.Name]; known {
 							if _, err := ds.open(hdr, tr, sz); err != nil {
@@ -1007,14 +964,6 @@ func extractSingleFile(ar *volume.MultiPartReader, idx *footerIndex, opt UnpackO
 	return fmt.Errorf("file not found in archive: %s", opt.OnlyFile)
 }
 
-// writeExtractedFile writes one file from a tar entry, then restores its
-// original permission bits and modification time from the tar header (tar
-// already carries this metadata). If the entry was delta-preprocessed at
-// pack time (see internal/block), the transform is reversed here before
-// writing, and integrity verification is FORCED on regardless of the
-// verify parameter - a bug in an experimental preprocessing path should
-// always surface as a loud error, never silently pass through because the
-// user happened to run with -no-verify.
 func writeExtractedFile(hdr *tar.Header, r io.Reader, ds *deltaState, destRoot string, expectedSHA [32]byte, expectedSize uint64, verify bool) error {
 	name := hdr.Name
 	r, err := ds.open(hdr, r, expectedSize)
@@ -1036,14 +985,13 @@ func writeExtractedFile(hdr *tar.Header, r io.Reader, ds *deltaState, destRoot s
 		return err
 	}
 	if preprocessed || isChain(hdr) {
-		// Filtered files and delta-chain members are always verified.
+		
 		verify = true
 	}
 
 	hasher := sha256.New()
 	mw := io.MultiWriter(f, hasher)
-	// Cap the output at the size the (authenticated) index promises, so a
-	// decompression bomb can't fill the disk.
+	
 	n, err := io.Copy(mw, io.LimitReader(src, int64(expectedSize)+1))
 	if err != nil {
 		f.Close()
@@ -1070,10 +1018,6 @@ func writeExtractedFile(hdr *tar.Header, r io.Reader, ds *deltaState, destRoot s
 	return nil
 }
 
-// writeExtractedSymlink recreates a symlink from its tar entry. On Windows,
-// os.Symlink typically requires Developer Mode enabled or an elevated
-// process - if it fails for that reason, the error from Go's standard
-// library explains it; this function doesn't try to work around it.
 func writeExtractedSymlink(hdr *tar.Header, destRoot string, expectedSHA [32]byte, verify bool) error {
 	outPath, err := safeJoin(destRoot, hdr.Name)
 	if err != nil {
@@ -1088,7 +1032,7 @@ func writeExtractedSymlink(hdr *tar.Header, destRoot string, expectedSHA [32]byt
 			return fmt.Errorf("integrity check failed for %s (symlink target corrupted)", hdr.Name)
 		}
 	}
-	_ = os.Remove(outPath) // in case something's already there
+	_ = os.Remove(outPath) 
 	return os.Symlink(hdr.Linkname, outPath)
 }
 
@@ -1099,10 +1043,6 @@ func dictIf(used bool, dict []byte) []byte {
 	return nil
 }
 
-// checkBlockHeaderMatchesIndex cross-checks the block's own header fields
-// (file count, uncompressed size) against the authenticated footer: those
-// header fields are not covered by the payload checksum, so without this a
-// flipped bit in them would go unnoticed.
 func checkBlockHeaderMatchesIndex(idx *footerIndex, bi uint32, fileCount uint32, uncompSize uint64) error {
 	var n uint32
 	var size uint64
@@ -1118,10 +1058,6 @@ func checkBlockHeaderMatchesIndex(idx *footerIndex, bi uint32, fileCount uint32,
 	return nil
 }
 
-// undoPreprocess reverses the per-file preprocessing recorded in the tar
-// entry. forced reports whether one was applied: such files are ALWAYS
-// SHA-256 verified, whatever -no-verify says, since a bug in an
-// experimental filter must fail loudly instead of writing wrong bytes.
 func undoPreprocess(hdr *tar.Header, r io.Reader, expectedSize uint64) (out io.Reader, forced bool, err error) {
 	switch hdr.PAXRecords[block.PAXPreprocess] {
 	case "":

@@ -9,20 +9,8 @@ import (
 	"strings"
 )
 
-// Extraction safety ("Zip Slip" protection).
-//
-// Entry names come from the archive, which may have been crafted by an
-// attacker, so a name must never be allowed to land outside the directory
-// the user asked to extract into - neither through "..", absolute paths and
-// drive letters, nor by writing "through" a symlink an earlier entry of the
-// same archive planted inside the output directory.
-
-// ErrUnsafePath is returned for entry names that would escape the output
-// directory.
 var ErrUnsafePath = errors.New("unsafe path in archive")
 
-// cleanEntryName validates an archive entry name and returns it in
-// slash-separated canonical form (no "." components, no empty components).
 func cleanEntryName(name string) (string, error) {
 	bad := func(why string) (string, error) {
 		return "", fmt.Errorf("%w: %q (%s)", ErrUnsafePath, name, why)
@@ -39,9 +27,7 @@ func cleanEntryName(name string) (string, error) {
 	if filepath.VolumeName(name) != "" || (len(name) >= 2 && name[1] == ':') {
 		return bad("drive or volume prefix")
 	}
-	// Check both separators on every OS: a name legitimately containing a
-	// backslash is rare, a Windows extraction treating one as a separator
-	// to climb out of the directory is not.
+	
 	parts := strings.FieldsFunc(name, func(r rune) bool { return r == '/' || r == '\\' })
 	var clean []string
 	for _, p := range parts {

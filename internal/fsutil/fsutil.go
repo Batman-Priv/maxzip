@@ -1,6 +1,4 @@
-// Package fsutil collects files from input paths. It only depends on
-// internal/ui (for warning output), which has no dependencies of its own,
-// so this still can't create an import cycle with anything else.
+
 package fsutil
 
 import (
@@ -13,22 +11,17 @@ import (
 	"gitlab.com/specterog/maxzip/internal/ui"
 )
 
-// FileRef describes one file (or symlink) to be archived.
 type FileRef struct {
-	Abs     string // absolute path on disk
-	Rel     string // path stored inside the archive (forward slashes)
+	Abs     string 
+	Rel     string 
 	Size    int64
-	Mode    os.FileMode // original permission bits, preserved on extract
-	ModTime time.Time   // original modification time, preserved on extract
+	Mode    os.FileMode 
+	ModTime time.Time   
 
-	IsSymlink  bool   // if true, LinkTarget is stored instead of file content
-	LinkTarget string // result of os.Readlink, only set when IsSymlink
+	IsSymlink  bool   
+	LinkTarget string 
 }
 
-// CollectFiles walks root (a file or a directory) and returns every regular
-// file and symlink found, skipping anything matching an exclude glob
-// pattern, plus every directory that ends up with no file (or symlink)
-// anywhere beneath it. Archive paths are stored relative to root.
 func CollectFiles(root string, excludes []string) ([]FileRef, []string, error) {
 	info, err := os.Lstat(root)
 	if err != nil {
@@ -101,8 +94,6 @@ func CollectFiles(root string, excludes []string) ([]FileRef, []string, error) {
 	return entries, emptyDirs, nil
 }
 
-// statEntry builds a FileRef for a regular file or symlink. Anything else
-// (device files, sockets, etc.) is skipped.
 func statEntry(path, rel string, fi os.FileInfo) (FileRef, bool, error) {
 	if fi.Mode()&os.ModeSymlink != 0 {
 		target, err := os.Readlink(path)
@@ -188,18 +179,6 @@ func resolveInputs(inputs []string) ([]resolvedInput, error) {
 	return out, nil
 }
 
-// CollectFilesMulti resolves every input (files, directories, symlinks,
-// and/or glob patterns like "*.pdf") and returns the combined file list
-// plus every empty directory that should still be preserved.
-//
-// Naming inside the archive:
-//   - a single directory input behaves exactly like CollectFiles: archive
-//     paths are relative to that directory
-//   - with multiple inputs, each directory's entries (files AND empty
-//     subdirectories) are prefixed with that directory's own name, and
-//     individually-matched files/symlinks sit at the archive root
-//   - naming collisions get a numeric suffix rather than silently
-//     overwriting an earlier entry
 func CollectFilesMulti(inputs []string, excludes []string) ([]FileRef, []string, error) {
 	if len(inputs) == 0 {
 		return nil, nil, fmt.Errorf("no input specified")

@@ -1,5 +1,4 @@
-// Package volume splits an archive's raw byte stream into fixed-size
-// volumes and reassembles them transparently for reading.
+
 package volume
 
 import (
@@ -10,8 +9,6 @@ import (
 	"strings"
 )
 
-// ParseSize parses human sizes like "500MB", "4GB", "128KB" (binary,
-// 1024-based). An empty string returns 0 (meaning "no limit").
 func ParseSize(s string) (int64, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -45,13 +42,9 @@ func ParseSize(s string) (int64, error) {
 	return int64(val * float64(mult)), nil
 }
 
-// SplitWriter writes a single logical byte stream across one or more
-// physical files, cutting at an exact byte count. It operates purely on raw
-// bytes - never on "logical units" like blocks or headers - so the split
-// point can never drift or land on a half-written structure.
 type SplitWriter struct {
 	basePath string
-	maxPart  int64 // 0 = never split
+	maxPart  int64 
 	partIdx  int
 	cur      *os.File
 	curSize  int64
@@ -116,9 +109,6 @@ func (s *SplitWriter) Write(p []byte) (int, error) {
 	return written, nil
 }
 
-// Written reports the current logical offset - used as the "absolute
-// offset" stored in block indexes, regardless of how many physical volume
-// files that offset actually spans across.
 func (s *SplitWriter) Written() int64 { return s.total }
 
 func (s *SplitWriter) Close() error {
@@ -128,8 +118,6 @@ func (s *SplitWriter) Close() error {
 	return nil
 }
 
-// MultiPartReader presents one or more volume files as a single seekable
-// logical stream (io.ReadSeeker).
 type MultiPartReader struct {
 	paths  []string
 	sizes  []int64
@@ -141,8 +129,6 @@ type MultiPartReader struct {
 	pos    int64
 }
 
-// OpenArchiveParts figures out whether path is a single-file archive or the
-// first volume of a split archive (by checking for path.001, .002, ...).
 func OpenArchiveParts(path string) (*MultiPartReader, error) {
 	if fi, err := os.Stat(path); err == nil {
 		return &MultiPartReader{
@@ -261,7 +247,6 @@ func (m *MultiPartReader) Read(p []byte) (int, error) {
 	return total, nil
 }
 
-// Size is the total logical size of the archive across all volumes.
 func (m *MultiPartReader) Size() int64 { return m.total }
 
 func (m *MultiPartReader) Close() error {

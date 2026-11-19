@@ -36,13 +36,13 @@ func TestDecodeMaxStopsBombs(t *testing.T) {
 }
 
 func TestUnmarshalRejectsLies(t *testing.T) {
-	// op count of 4 billion with no data
+	
 	b := make([]byte, 4)
 	binary.BigEndian.PutUint32(b, 0xFFFFFFFF)
 	if _, err := Unmarshal(b); err == nil {
 		t.Fatal("impossible op count accepted")
 	}
-	// literal claiming 4 GB
+	
 	b = []byte{0, 0, 0, 1, byte(Literal), 0xFF, 0xFF, 0xFF, 0xFF}
 	if _, err := Unmarshal(b); err == nil {
 		t.Fatal("impossible literal length accepted")

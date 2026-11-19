@@ -1,9 +1,4 @@
-// Package selftest exercises a battery of real pack/unpack round-trips
-// against generated sample data and checks the result is byte-for-byte
-// identical to the input. This is the one genuine way to verify the tool
-// actually works end-to-end - the code that wrote it could not compile or
-// run it, so treat this command as the real source of truth, not the
-// commit messages.
+
 package selftest
 
 import (
@@ -24,12 +19,10 @@ import (
 
 type scenario struct {
 	name          string
-	skipExecCheck bool // true for modes documented not to preserve permissions yet
+	skipExecCheck bool 
 	modify        func(opt *archive.PackOptions)
 }
 
-// Run executes every scenario and prints PASS/FAIL for each. Returns an
-// error describing which scenarios failed, if any.
 func Run() error {
 	srcDir, err := os.MkdirTemp("", "maxzip-selftest-src-")
 	if err != nil {
@@ -132,8 +125,6 @@ func generateSamples(root string) error {
 	files["random.bin"] = random1
 	files["bin/prog.elf"] = syntheticX86ELF()
 
-	// Three "versions" of one file: each differs from the previous in a few
-	// places, so -delta can store v2/v3 as small diffs of v1/v2.
 	ver := make([]byte, 160*1024)
 	if _, err := rand.Read(ver); err != nil {
 		return err
@@ -144,8 +135,6 @@ func generateSamples(root string) error {
 	copy(ver[90000:90128], bytes.Repeat([]byte{0x22}, 128))
 	files["docs/report_v3.dat"] = append(append([]byte(nil), ver...), []byte("tail added in v3")...)
 
-	// A fake already-compressed format (by extension) with genuinely
-	// incompressible content - exercises the smart-store probe path.
 	random2 := make([]byte, 128*1024)
 	if _, err := rand.Read(random2); err != nil {
 		return err
@@ -160,18 +149,14 @@ func generateSamples(root string) error {
 		return err
 	}
 	files["dup/a.bin"] = dup
-	files["dup/b.bin"] = append([]byte(nil), dup...) // identical content - exercises dedup
+	files["dup/b.bin"] = append([]byte(nil), dup...) 
 
-	bigish := make([]byte, 1200*1024) // 1.2MB, partially compressible pattern
+	bigish := make([]byte, 1200*1024) 
 	for i := range bigish {
 		bigish[i] = byte(i % 251)
 	}
 	files["bigfile.bin"] = bigish
 
-	// Smoothly-varying binary data - a good demonstration case for the
-	// delta preprocessor (adjacent bytes are close in value, so a byte-
-	// wise delta turns this into a mostly-repetitive, highly compressible
-	// stream). Also exercises the -preprocess delta round-trip.
 	ramp := make([]byte, 96*1024)
 	v := 0
 	for i := range ramp {
@@ -190,12 +175,10 @@ func generateSamples(root string) error {
 		}
 	}
 
-	// A nested empty directory that should still exist after extraction.
 	if err := os.MkdirAll(filepath.Join(root, "empty-dir", "nested-empty"), 0o755); err != nil {
 		return err
 	}
 
-	// A file whose executable bit must survive the round trip.
 	return os.WriteFile(filepath.Join(root, "script.sh"), []byte("#!/bin/sh\necho hi\n"), 0o755)
 }
 
@@ -311,13 +294,6 @@ func listFiles(root string) (map[string]os.FileInfo, error) {
 	return out, err
 }
 
-// testDeltaEngine directly round-trips internal/delta (not yet wired into
-// the archive format - see that package's doc comment). It builds a
-// "reference" and a "target" that differs from it in the middle and has
-// extra bytes appended (simulating a new version of a file), encodes the
-// diff, marshals/unmarshals it (exercising the serialization format too,
-// not just the in-memory Ops), decodes it back, and checks the result is
-// byte-for-byte identical to the target.
 func testDeltaEngine() error {
 	ref := make([]byte, 100*1024)
 	if _, err := rand.Read(ref); err != nil {
@@ -349,8 +325,6 @@ func testDeltaEngine() error {
 		return fmt.Errorf("round-trip mismatch: got %d bytes, want %d bytes", len(decoded), len(target))
 	}
 
-	// Also check an edge case: target identical to reference (should be
-	// almost entirely Copy ops and still round-trip exactly).
 	ops2 := delta.Encode(ref, ref, 4096)
 	decoded2, err := delta.Decode(ref, ops2)
 	if err != nil {
@@ -360,8 +334,6 @@ func testDeltaEngine() error {
 		return fmt.Errorf("identical-input round-trip mismatch: got %d bytes, want %d bytes", len(decoded2), len(ref))
 	}
 
-	// And a target with no relation to the reference at all (should still
-	// round-trip, just as mostly-literal data).
 	unrelated := make([]byte, 50*1024)
 	if _, err := rand.Read(unrelated); err != nil {
 		return err
@@ -378,9 +350,6 @@ func testDeltaEngine() error {
 	return nil
 }
 
-// testComment checks that a comment set at pack time (including non-ASCII
-// text, since comments are free-form UTF-8) survives byte-for-byte and is
-// readable via ReadComment without needing the archive's password.
 func testComment(srcDir string) error {
 	workDir, err := os.MkdirTemp("", "maxzip-selftest-comment-")
 	if err != nil {
@@ -413,8 +382,6 @@ func testComment(srcDir string) error {
 		return fmt.Errorf("comment mismatch: got %q, want %q", got, want)
 	}
 
-	// An archive with no comment should report has=false, not a stray
-	// empty string that looks like a comment was set.
 	noCommentPath := filepath.Join(workDir, "nocomment.mzp")
 	opt2 := opt
 	opt2.Output = noCommentPath
@@ -433,10 +400,6 @@ func testComment(srcDir string) error {
 	return nil
 }
 
-// testMultiInput packs from three separate inputs at once - a glob
-// pattern, one explicit file, and one directory - and checks the
-// resulting archive contains exactly what each input should have
-// contributed, correctly named.
 func testMultiInput(srcDir string) error {
 	workDir, err := os.MkdirTemp("", "maxzip-selftest-multi-")
 	if err != nil {
@@ -447,7 +410,7 @@ func testMultiInput(srcDir string) error {
 	archivePath := filepath.Join(workDir, "test.mzp")
 	restoreDir := filepath.Join(workDir, "restored")
 
-	pattern := filepath.Join(srcDir, "*.bin") // matches random.bin, bigfile.bin, ramp.bin
+	pattern := filepath.Join(srcDir, "*.bin") 
 	explicitFile := filepath.Join(srcDir, "text.txt")
 	subDir := filepath.Join(srcDir, "nested")
 
@@ -478,7 +441,7 @@ func testMultiInput(srcDir string) error {
 		}
 	}
 
-	mustNotExist := []string{"photo.jpg", "dup/a.bin", "dup/b.bin"} // not covered by any of the three inputs
+	mustNotExist := []string{"photo.jpg", "dup/a.bin", "dup/b.bin"} 
 	for _, name := range mustNotExist {
 		if _, ok := restored[name]; ok {
 			return fmt.Errorf("file present that no input should have included: %s", name)
@@ -496,13 +459,6 @@ func keysOf(m map[string]os.FileInfo) []string {
 	return out
 }
 
-// testSymlink packs and extracts a directory containing one symlink, and
-// checks the restored entry is really a symlink pointing at the same
-// target. Uses its own isolated source directory (not the shared one every
-// other scenario uses) so that if symlink creation itself fails in this
-// environment (Windows commonly requires Developer Mode or an elevated
-// process for os.Symlink), only this one check is skipped - it doesn't
-// take down the rest of the suite.
 func testSymlink() error {
 	srcDir, err := os.MkdirTemp("", "maxzip-selftest-symlink-src-")
 	if err != nil {
@@ -558,11 +514,6 @@ func testSymlink() error {
 	return nil
 }
 
-// testListAndTest checks that an encrypted archive's index is really
-// hidden (listing without the password must fail), that listing with the
-// password works, and that archive.Test correctly
-// passes with the right password and correctly fails (not silently, not
-// with a crash) with a wrong one.
 func testListAndTest(srcDir string) error {
 	workDir, err := os.MkdirTemp("", "maxzip-selftest-listtest-")
 	if err != nil {
@@ -618,9 +569,6 @@ func testListAndTest(srcDir string) error {
 	return nil
 }
 
-// testDeltaChainsHelp checks -delta really shrinks an archive of versioned
-// files (the diff is stored instead of three near-identical copies) and
-// that every version still comes back byte-for-byte.
 func testDeltaChainsHelp(srcDir string) error {
 	work, err := os.MkdirTemp("", "maxzip-selftest-delta-")
 	if err != nil {
@@ -665,8 +613,6 @@ func testDeltaChainsHelp(srcDir string) error {
 	return compareTrees(filepath.Join(srcDir, "docs"), restore, false)
 }
 
-// testDeltaSingleFile extracts only the LAST version out of a delta chain:
-// it can only be rebuilt by decoding the earlier versions first.
 func testDeltaSingleFile(srcDir string) error {
 	work, err := os.MkdirTemp("", "maxzip-selftest-delta1-")
 	if err != nil {
@@ -699,14 +645,10 @@ func testDeltaSingleFile(srcDir string) error {
 	return nil
 }
 
-// syntheticX86ELF builds a fake x86-64 executable: a valid-looking ELF
-// magic + machine field followed by "code" that calls a handful of
-// functions over and over with RELATIVE displacements - the pattern the
-// BCJ filter exists for.
 func syntheticX86ELF() []byte {
 	b := make([]byte, 64)
 	copy(b, "\x7fELF\x02\x01\x01")
-	b[18] = 62 // EM_X86_64
+	b[18] = 62 
 	targets := []uint32{0x1000, 0x2340, 0x3a10, 0x5000, 0x7fe0}
 	filler := []byte{0x55, 0x48, 0x89, 0xe5, 0x90, 0x5d, 0xc3, 0x31, 0xc0}
 	for i := 0; i < 6000; i++ {
@@ -718,8 +660,6 @@ func syntheticX86ELF() []byte {
 	return b
 }
 
-// testBCJHelps checks -preprocess bcj shrinks an archive holding an x86
-// executable and restores it byte-for-byte.
 func testBCJHelps(srcDir string) error {
 	work, err := os.MkdirTemp("", "maxzip-selftest-bcj-")
 	if err != nil {

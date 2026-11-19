@@ -1,20 +1,4 @@
-// maxzip - a smarter, stronger general-purpose archiver than zip/rar.
-//
-// See the README for the full feature list and architecture notes. This
-// file is just flag parsing; all real logic lives in the internal/
-// packages, one per concern:
-//
-//	internal/fsutil      - collecting files from disk
-//	internal/format      - archive header/footer binary layout
-//	internal/cryptoutil  - AES-256-GCM encryption, Argon2id KDF
-//	internal/compressor  - zstd/xz/deflate/lz4/brotli + auto-benchmark
-//	internal/dictionary  - frequency-based zstd dictionary
-//	internal/smart       - detecting already-compressed files
-//	internal/block       - solid-block packing (normal mode, symlinks)
-//	internal/dedup       - content-defined chunking (dedup mode / big files)
-//	internal/volume      - multi-volume split/join
-//	internal/ui          - colored terminal output
-//	internal/archive     - ties everything together (Pack/Unpack/List/Test)
+
 package main
 
 import (
@@ -33,7 +17,6 @@ import (
 	"gitlab.com/specterog/maxzip/internal/volume"
 )
 
-// stringList collects a flag repeated multiple times, e.g. -i a.txt -i b.txt.
 type stringList []string
 
 func (s *stringList) String() string { return strings.Join(*s, ",") }
@@ -151,9 +134,6 @@ func cmdTest(args []string) {
 	}
 }
 
-// presetValues holds the flag values a -preset name maps to. Only used to
-// fill in flags the user did NOT explicitly pass - an explicit flag always
-// wins over a preset.
 type presetValues struct {
 	algo, level, optimize, smart, dict, blockSize string
 }
@@ -369,9 +349,6 @@ func splitComma(s string) []string {
 
 const passwordHelp = `password ("-" = read from stdin; default: $MAXZIP_PASSWORD)`
 
-// resolvePassword implements the password sources: an explicit value, "-"
-// for one line from stdin, or the MAXZIP_PASSWORD environment variable when
-// the flag was left empty.
 func resolvePassword(v string) string {
 	switch v {
 	case "-":

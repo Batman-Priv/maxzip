@@ -1,5 +1,4 @@
-// Package compressor abstracts over five codecs (store, zstd, xz, deflate,
-// lz4, brotli) behind one Algo enum, plus a sample-based auto-selector.
+
 package compressor
 
 import (
@@ -24,11 +23,6 @@ const (
 	LZ4     Algo = 4
 	Brotli  Algo = 5
 
-	// Auto is a sentinel only meant for flag parsing: callers must resolve
-	// it to a concrete algorithm (see compressor.AutoSelect) before it is
-	// ever written to disk. It deliberately doesn't fit in the 3-bit algo
-	// field in the archive header, which is the point - it must never be
-	// persisted.
 	Auto Algo = 255
 )
 
@@ -83,18 +77,6 @@ type nopWriteCloser struct{ io.Writer }
 
 func (nopWriteCloser) Close() error { return nil }
 
-// NewWriter wraps w with a compressor for the given algorithm/level.
-//
-// There is no dict parameter: the klauspost/compress/zstd library's
-// WithEncoderDict requires a formally-structured zstd dictionary (magic
-// number + entropy tables), not a plain byte blob - passing raw content
-// through that API fails with "invalid input: magic number mismatch"
-// (caught by real testing). Dictionary support is instead implemented one
-// layer up, in internal/block, by literally prepending the dictionary
-// bytes to each block's content before compression - a plain
-// concatenation with no library-specific format to get right, since any
-// LZ-style compressor can already reference earlier bytes in the same
-// stream.
 func NewWriter(w io.Writer, algo Algo, level string, threads int) (io.WriteCloser, error) {
 	switch algo {
 	case Zstd:
@@ -154,14 +136,11 @@ func NewWriter(w io.Writer, algo Algo, level string, threads int) (io.WriteClose
 		lvl := map[string]int{"fastest": 1, "default": 6, "better": 9, "best": 11}[level]
 		return brotli.NewWriterLevel(w, lvl), nil
 
-	default: // Store
+	default: 
 		return nopWriteCloser{w}, nil
 	}
 }
 
-// NewDecompressReader returns a plain io.Reader for the given algorithm.
-// Call CloseDecompressor(r) when done to release any internal resources.
-// See NewWriter's comment for why there's no dict parameter here either.
 func NewDecompressReader(r io.Reader, algo Algo) (io.Reader, error) {
 	switch algo {
 	case Zstd:

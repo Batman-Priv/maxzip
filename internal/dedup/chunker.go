@@ -1,16 +1,8 @@
-// Package dedup splits file content into content-defined chunks so
-// identical chunks (across different files, or repeated within one file)
-// can be stored once. This is deliberately used instead of a separate
-// delta-compression engine: for near-duplicate files, chunk-level dedup
-// captures most of the same benefit (shared regions get stored once)
-// without needing a from-scratch binary-diff algorithm, and it also
-// dedupes across unrelated files, which delta compression alone would not.
+
 package dedup
 
 import "io"
 
-// windowSize must stay below 64 so the buzhash rotate-by-window-size never
-// hits the "shift by the full width" edge case.
 const windowSize = 48
 
 var buzTable [256]uint64
@@ -24,7 +16,7 @@ func splitmix64(x *uint64) uint64 {
 }
 
 func init() {
-	seed := uint64(1) // fixed seed: deterministic, reproducible chunking
+	seed := uint64(1) 
 	for i := range buzTable {
 		buzTable[i] = splitmix64(&seed)
 	}
@@ -34,15 +26,12 @@ func rotl(x uint64, k uint) uint64 {
 	return (x << k) | (x >> (64 - k))
 }
 
-// ChunkOptions controls content-defined chunking. Min/Max hard-clamp chunk
-// size; Mask sets the (probabilistic) average chunk size.
 type ChunkOptions struct {
 	Min  int
 	Max  int
 	Mask uint64
 }
 
-// NewChunkOptions derives Min/Max/Mask from a target average chunk size.
 func NewChunkOptions(avg int) ChunkOptions {
 	if avg < 4096 {
 		avg = 4096
@@ -58,12 +47,6 @@ func NewChunkOptions(avg int) ChunkOptions {
 	}
 }
 
-// ChunkStream splits r into content-defined chunks using a rolling buzhash,
-// calling emit for each chunk in order. This is a simplified FastCDC-style
-// chunker (rolling hash + min/max clamps), not a from-the-paper
-// implementation - but it captures the core property that matters: chunk
-// boundaries shift with the data, so an insertion or deletion in a file
-// only disturbs the chunks right around it, not every chunk after it.
 func ChunkStream(r io.Reader, opt ChunkOptions, emit func([]byte) error) error {
 	var hash uint64
 	window := make([]byte, 0, windowSize)

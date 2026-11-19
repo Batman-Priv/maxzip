@@ -36,7 +36,7 @@ func TestBCJRoundTripRandom(t *testing.T) {
 }
 
 func TestBCJExactCall(t *testing.T) {
-	// call +0x10 at offset 0 -> absolute 0x15
+	
 	b := []byte{0xE8, 0x10, 0, 0, 0, 0x90}
 	BCJEncode(b)
 	if b[1] != 0x15 || b[4] != 0 {

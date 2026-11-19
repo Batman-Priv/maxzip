@@ -1,20 +1,3 @@
-// Package archive orchestrates every other internal package into the
-// actual pack/unpack pipeline.
-//
-// A normal archive has two kinds of content, both always present in the
-// footer (possibly empty):
-//   - "blocks": ordinary files (and symlinks) grouped into solid tar
-//     blocks (internal/block)
-//   - "chunked": content-defined chunks, deduplicated globally
-//     (internal/dedup) - used for every regular file in -dedup mode, and
-//     automatically for any single file larger than -big-file-threshold
-//     even without -dedup, so one huge file doesn't become one giant
-//     unparallelizable, memory-heavy block
-//
-// -dedup mode still uses the "blocks" section for any symlinks (a chunked
-// block holds raw content chunks, not tar entries, and a symlink has no
-// content of its own to chunk) - so both modes share exactly the same
-// footer shape, just with different proportions of each section.
 package archive
 
 import (
@@ -32,67 +15,40 @@ import (
 	"sync"
 	"time"
 
-	"gitlab.com/specterog/maxzip/internal/block"
-	"gitlab.com/specterog/maxzip/internal/compressor"
-	"gitlab.com/specterog/maxzip/internal/cryptoutil"
-	"gitlab.com/specterog/maxzip/internal/dedup"
-	"gitlab.com/specterog/maxzip/internal/dictionary"
-	"gitlab.com/specterog/maxzip/internal/format"
-	"gitlab.com/specterog/maxzip/internal/fsutil"
-	"gitlab.com/specterog/maxzip/internal/progress"
-	"gitlab.com/specterog/maxzip/internal/smart"
-	"gitlab.com/specterog/maxzip/internal/ui"
-	"gitlab.com/specterog/maxzip/internal/volume"
+	"maxzip/internal/block"
+	"maxzip/internal/compressor"
+	"maxzip/internal/cryptoutil"
+	"maxzip/internal/dedup"
+	"maxzip/internal/dictionary"
+	"maxzip/internal/format"
+	"maxzip/internal/fsutil"
+	"maxzip/internal/progress"
+	"maxzip/internal/smart"
+	"maxzip/internal/ui"
+	"maxzip/internal/volume"
 )
 
 type PackOptions struct {
-	Inputs     []string // files, directories, and/or glob patterns like "*.pdf"
-	Output     string
-	Algo       compressor.Algo
-	Level      string
-	Optimize   string // for -algo auto: "size" | "speed" | "balanced"
-	Password   string
-	Smart      smart.Mode
-	Dict       string // "off" | "auto"
-	Dedup      bool
-	DedupChunk int64 // target average chunk size in bytes
-	Threads    int
-	Exclude    []string
-	BlockSize  int64
-	SplitBytes int64
-
-	// BigFileThreshold: in normal (non-dedup) mode, any single file larger
-	// than this is automatically routed through chunked storage instead of
-	// becoming one big solid block. 0 means "off" (never auto-split) -
-	// this only happens if you set it explicitly.
+	Inputs           []string
+	Output           string
+	Algo             compressor.Algo
+	Level            string
+	Optimize         string
+	Password         string
+	Smart            smart.Mode
+	Dict             string
+	Dedup            bool
+	DedupChunk       int64
+	Threads          int
+	Exclude          []string
+	BlockSize        int64
+	SplitBytes       int64
 	BigFileThreshold int64
-
-	// Preprocess: "off", "delta" or "bcj". "delta": every file's bytes are
-	// byte-wise delta-filtered before compression. "bcj": x86 ELF/PE
-	// executables get their CALL/JMP operands made absolute (see
-	// internal/preprocess); other files are untouched. Normal
-	// (non-dedup) mode only.
-	// Files using it are always SHA-256-verified on extraction regardless
-	// of -no-verify, since a bug here would otherwise only be caught if
-	// verification happened to still be on.
-	Preprocess string
-
-	// Comment is optional free-text metadata stored in the archive header,
-	// always in plaintext even for encrypted archives (like a zip/rar
-	// comment) - read it back with `maxzip comment -i <archive>`, no
-	// password needed.
-	Comment string
-
-	// Delta enables file-level delta chains: inside a solid block, a file
-	// that looks like another version of an earlier file in the same block
-	// (see block.chainKey) is stored as a binary diff against it when that
-	// is clearly smaller. Normal (non-dedup) mode only; ignored together
-	// with Preprocess "delta". DeltaMax is the largest file considered
-	// (0 = block.DefaultDeltaMax).
-	Delta    bool
-	DeltaMax int64
-
-	Verbose bool // print per-block/per-file detail in addition to the progress bar
+	Preprocess       string
+	Comment          string
+	Delta            bool
+	DeltaMax         int64
+	Verbose          bool
 }
 
 func (o PackOptions) deltaMax() int64 {
@@ -112,12 +68,6 @@ func Pack(opt PackOptions) error {
 	}
 	sort.Slice(files, func(i, j int) bool { return files[i].Rel < files[j].Rel })
 
-	// Chunked storage (-dedup and automatic big-file splitting) has no
-	// place to put a symlink - it stores raw content chunks, not tar
-	// entries, and a symlink has no content of its own. Symlinks always go
-	// through the normal solid-block (tar) path instead; in -dedup mode
-	// specifically, that means routing them out before chunking even
-	// though the rest of the archive is chunked.
 	var symlinks []fsutil.FileRef
 	if opt.Dedup {
 		var rest []fsutil.FileRef
@@ -141,9 +91,6 @@ func Pack(opt PackOptions) error {
 
 	var dict []byte
 	if opt.Dict == "auto" && algo == compressor.Zstd && !opt.Dedup {
-		// Dict is scoped to normal solid tar-blocks only - see
-		// dedup.BlockBuilder's doc comment for why chunked storage (both
-		// -dedup and automatic big-file chunking) can't use it safely.
 		paths := make([]string, len(files))
 		for i, f := range files {
 			paths[i] = f.Abs
@@ -219,11 +166,6 @@ func Pack(opt PackOptions) error {
 		blockSize = 64 << 20
 	}
 
-	// Big-file chunking is opt-in only: it happens only if the user
-	// explicitly set -big-file-threshold to a positive size. No default
-	// threshold is applied - unset (0) means "never split a single file,
-	// no matter how large", so behavior never changes under someone's feet.
-	// Symlinks are never routed here (their Size is always 0).
 	var normalFiles, bigFiles []fsutil.FileRef
 	if opt.BigFileThreshold > 0 {
 		for _, fe := range files {
@@ -279,10 +221,20 @@ func resolveAutoAlgo(files []fsutil.FileRef, level, optimize string) (compressor
 		fmt.Printf("%s=%dB/%s ", a, r.Size, r.Duration.Round(time.Millisecond))
 	}
 	fmt.Printf("-> chosen %s\n", best)
+
+	if optimize == "size" && best != compressor.Zstd {
+		if zr, ok := results[compressor.Zstd]; ok {
+			if br, ok2 := results[best]; ok2 && zr.Size > 0 {
+				gain := float64(zr.Size-br.Size) / float64(zr.Size)
+				if gain < 0.02 {
+					fmt.Printf("auto-select: %s gains only %.2f%% over zstd; choosing zstd for speed\n", best, gain*100)
+					return compressor.Zstd, nil
+				}
+			}
+		}
+	}
 	return best, nil
 }
-
-// ---------- normal mode: solid file blocks ----------
 
 func packBlocks(sw *volume.SplitWriter, files []fsutil.FileRef, opt PackOptions, algo compressor.Algo, dict []byte, aead *cryptoutil.Cipher, bar *progress.Bar) (blockOffsets []int64, footerFiles []footerFileEntry, totalOrig int64, err error) {
 	if len(files) == 0 {
@@ -298,8 +250,6 @@ func packBlocks(sw *volume.SplitWriter, files []fsutil.FileRef, opt PackOptions,
 		threads = runtime.NumCPU()
 	}
 
-	// Incompressible media: use smaller blocks so all cores get work (a
-	// single 64-128MB block is compressed by one thread only).
 	var incompTotal int64
 	for _, fe := range files {
 		incompTotal += fe.Size
@@ -310,8 +260,6 @@ func packBlocks(sw *volume.SplitWriter, files []fsutil.FileRef, opt PackOptions,
 	}
 	plans := block.PlanBlocks(files, algo, opt.Smart, blockSize, incompTarget)
 
-	// If there are fewer blocks than cores, lend the spare cores to the
-	// encoder itself (zstd can use several threads inside one block).
 	encThreads := 1
 	if len(plans) > 0 && len(plans) < threads {
 		encThreads = threads / len(plans)
@@ -408,29 +356,7 @@ func packBlocks(sw *volume.SplitWriter, files []fsutil.FileRef, opt PackOptions,
 	return blockOffsets, footerFiles, totalOrig, nil
 }
 
-// buildBlockWithFallback builds one block and guarantees the result is
-// never larger than storing the files raw would be - the actual bug this
-// fixes: smart mode used to guess "this won't compress" from extension/
-// magic-bytes alone and skip compression outright, but real formats like
-// APKs (often DEFLATE'd at a low level by build tools) and JPEGs (headers,
-// suboptimal Huffman tables) frequently DO have a few percent of slack, and
-// a real archiver only finds that by actually trying, the way RAR/7-Zip do.
-//
-// For blocks flagged LikelyIncompressible, a cheap zstd-fastest probe runs
-// first: if even that shows negligible gain, it stores directly without
-// ever running the (possibly much slower) chosen algorithm. Otherwise the
-// real algorithm runs. If a dictionary is in play, the block is also built
-// WITHOUT it and whichever result is smaller wins - a dictionary is just
-// extra bytes prepended before compression (see block.Build), so on data
-// that doesn't resemble it, it's pure overhead with nothing to show for
-// it. Finally, if compression still didn't help at all, it falls back to
-// storing raw. Returns the algorithm actually used, which the caller must
-// record (it can differ from the plan's original algorithm).
 func buildBlockWithFallback(plan block.Plan, idx uint32, opt PackOptions, dict []byte, aead *cryptoutil.Cipher, bar *progress.Bar, encThreads int) (*block.Meta, compressor.Algo, bool, error) {
-	// Only the pass whose output is (normally) kept reports progress. Probe
-	// passes, the "without dictionary" comparison pass and the final
-	// "didn't help, store raw" pass are silent so the bar never overshoots
-	// or runs backwards.
 	silent := block.Hooks{Threads: encThreads}
 	loud := block.Hooks{OnRead: bar.Add, Threads: encThreads}
 	aad := blockAAD(idx)
@@ -443,16 +369,11 @@ func buildBlockWithFallback(plan block.Plan, idx uint32, opt PackOptions, dict [
 		preprocess = ""
 	}
 
-	// The quick zstd-fastest probe is only a time-saver, and it is blind to
-	// what a strong codec can still squeeze out of "incompressible" files
-	// (JPEG/PNG/APK/DOCX typically give 2-5% with xz or brotli, which is
-	// exactly the gap to RAR). So at -level better/best it is used only for
-	// media that really never shrinks (video/audio); everything else gets
-	// the real algorithm, and storing raw remains the fallback if even that
-	// doesn't help (below).
 	level := opt.Level
 	strong := opt.Level == "best" || opt.Level == "better"
-	if plan.LikelyIncompressible && (!strong || allTrulyIncompressible(plan.Files)) {
+	explicitAlgo := plan.Algo != compressor.Auto
+
+	if plan.LikelyIncompressible && !explicitAlgo && (!strong || allTrulyIncompressible(plan.Files)) {
 		probe, err := block.Build(plan.Files, compressor.Zstd, "fastest", aead, aad, nil, preprocess, opt.deltaMax(), silent)
 		if err != nil {
 			return nil, 0, false, err
@@ -465,21 +386,10 @@ func buildBlockWithFallback(plan block.Plan, idx uint32, opt PackOptions, dict [
 			}
 			return m, compressor.Store, false, nil
 		}
-		os.Remove(probe.TempPath) // discard the probe; the real pass redoes it below
-
-		// Video/audio gains at most a couple of percent from ANY codec, but
-		// xz/brotli at -level best run at ~1 MB/s in pure Go, so they turn
-		// "a few percent" into minutes. Use zstd "better" for these blocks
-		// instead (the block's algorithm is recorded per block, so the
-		// archive stays valid).
-		if allTrulyIncompressible(plan.Files) && (plan.Algo == compressor.XZ || plan.Algo == compressor.Brotli) {
-			plan.Algo = compressor.Zstd
-			level = "better"
-		}
+		os.Remove(probe.TempPath)
 	}
 
 	var d []byte
-	droppedDict := false
 	if plan.Algo == compressor.Zstd {
 		d = dict
 	}
@@ -494,7 +404,7 @@ func buildBlockWithFallback(plan block.Plan, idx uint32, opt PackOptions, dict [
 			if mNoDict.PayloadLen < m.PayloadLen {
 				os.Remove(m.TempPath)
 				m = mNoDict
-				droppedDict = true
+				d = nil
 			} else {
 				os.Remove(mNoDict.TempPath)
 			}
@@ -509,19 +419,9 @@ func buildBlockWithFallback(plan block.Plan, idx uint32, opt PackOptions, dict [
 		}
 		return m2, compressor.Store, false, nil
 	}
-	return m, plan.Algo, len(d) > 0 && !droppedDict, nil
+	return m, plan.Algo, len(d) > 0, nil
 }
 
-// ---------- chunked storage: shared by -dedup mode and automatic big-file handling ----------
-
-// packChunked splits files into content-defined chunks, deduplicates
-// identical chunks globally, and writes unique chunks into blocks. Files
-// smart-mode would store raw go into a separate Store-algo block stream
-// from files that get compressed, so a block's compressor stream stays
-// consistent. Chunk discovery is inherently sequential (a chunk's
-// uniqueness depends on every chunk seen before it), so this isn't
-// parallelized the way packBlocks is. Never uses a shared dictionary - see
-// dedup.BlockBuilder's doc comment for why.
 func packChunked(sw *volume.SplitWriter, files []fsutil.FileRef, opt PackOptions, algo compressor.Algo, aead *cryptoutil.Cipher, bar *progress.Bar) (chunkTable []chunkEntry, blockOffsets []int64, fileList []dedupFileEntry, totalOrig int64, err error) {
 	if len(files) == 0 {
 		return nil, nil, nil, 0, nil
@@ -655,18 +555,7 @@ func packChunked(sw *volume.SplitWriter, files []fsutil.FileRef, opt PackOptions
 	return chunkTable, blockOffsets, fileList, totalOrig, nil
 }
 
-// ---------- footer writing ----------
-
-// writeFooter writes the combined footer shared by every archive: a
-// normal solid-block section (files, mostly symlinks in -dedup mode),
-// a chunked section (unique content chunks), and an empty-directories
-// list, followed by a checksum of the whole footer and its own offset.
 func writeFooter(sw *volume.SplitWriter, aead *cryptoutil.Cipher, blockOffsets []int64, footerFiles []footerFileEntry, chunkTable []chunkEntry, chunkBlockOffsets []int64, chunkFiles []dedupFileEntry, emptyDirs []string, totalOrig int64) error {
-	// The footer is assembled in memory first: for an encrypted archive it
-	// is then encrypted + authenticated as one stream (so file names,
-	// sizes and hashes are no longer readable or forgeable without the
-	// password), and in every case it is followed by a SHA-256 of the
-	// stored bytes (cheap corruption check) and the footer's offset.
 	var fw bytes.Buffer
 
 	if err := binary.Write(&fw, binary.BigEndian, uint32(len(blockOffsets))); err != nil {
@@ -743,9 +632,6 @@ func writeFooter(sw *volume.SplitWriter, aead *cryptoutil.Cipher, blockOffsets [
 	return nil
 }
 
-// writeChunkedSection serializes a chunk table + block offset list + file
-// list. Always written (even if empty) so the reader logic doesn't need to
-// branch on whether it's present.
 func writeChunkedSection(w io.Writer, chunkTable []chunkEntry, blockOffsets []int64, fileList []dedupFileEntry) error {
 	if err := binary.Write(w, binary.BigEndian, uint32(len(chunkTable))); err != nil {
 		return err
@@ -813,8 +699,6 @@ func copyTempFile(dst io.Writer, path string) error {
 	return err
 }
 
-// trulyIncompressibleExt lists formats whose payload is already entropy
-// coded by a modern lossy codec, where even xz --best gains well under 1%.
 var trulyIncompressibleExt = map[string]bool{
 	".mp4": true, ".mkv": true, ".avi": true, ".mov": true, ".wmv": true,
 	".flv": true, ".webm": true, ".m4v": true,

@@ -1,38 +1,4 @@
-// Package format defines the on-disk layout of a maxzip archive (MAXZ4) and
-// the low-level read/write helpers shared by every archive mode.
-//
-// Header:
-//
-//	[5 bytes]  magic "MAXZ5"
-//	[1 byte]   format version
-//	[1 byte]   flags: bit0=encrypted, bit1=dedup mode, bit2=dictionary present,
-//	           bit6=comment present, bits3-5=default algo (informational;
-//	           every block also stores its own actual algo byte, so this
-//	           is only a quick hint)
-//	[16 bytes] salt (only if encrypted)
-//	[4+4+1 bytes] Argon2id time, memory (KiB), threads (only if encrypted)
-//	[4 bytes + N] dictionary length + bytes (only if FlagDict is set)
-//	[4 bytes + N] comment length + UTF-8 bytes (only if FlagComment is set) -
-//	           always stored in plaintext, even for encrypted archives, the
-//	           same way zip/rar comments are viewable without a password
-//	[32 bytes] SHA-256 of every header byte above (catches header corruption;
-//	           block contents and the footer index are each separately
-//	           checksummed too - see internal/archive - so this is the one
-//	           remaining piece of the file that wasn't covered by anything)
-//	... body (block-mode or dedup-mode; see internal/archive) ...
-//
-// Body layout is documented in internal/archive.
-//
-// Version 2 changes from version 1: header checksum added, and the footer
-// layout in internal/archive gained an always-present "chunked section"
-// (used by -dedup and automatic big-file splitting). Version 3 adds the
-// comment field. Version 4 adds an empty-directories section to the
-// normal-mode footer, and permission/mtime fields to chunked-mode file
-// entries (see internal/archive for both). Version 5 stores the Argon2id
-// parameters in the header, uses per-stream sub-keys with authenticated
-// chunk positions (see internal/cryptoutil), and encrypts + authenticates
-// the footer index of encrypted archives. Archives from an earlier version
-// are not readable by this version.
+
 package format
 
 import (
@@ -58,20 +24,17 @@ const (
 
 	SaltSize = 16
 
-	// Upper bounds enforced when reading, so a crafted header can't force a
-	// huge allocation before any checksum has been verified.
 	MaxDictSize    = 64 << 20
 	MaxCommentSize = 1 << 20
 	MaxStringSize  = 0xFFFF
 )
 
-// Header holds everything read from (or written to) the fixed archive header.
 type Header struct {
 	Flags   byte
-	Salt    []byte               // present only if Flags&FlagEncrypted != 0
-	KDF     cryptoutil.KDFParams // present only if Flags&FlagEncrypted != 0
-	Dict    []byte               // present only if Flags&FlagDict != 0
-	Comment string               // present only if Flags&FlagComment != 0
+	Salt    []byte               
+	KDF     cryptoutil.KDFParams 
+	Dict    []byte               
+	Comment string               
 }
 
 func WriteHeader(w io.Writer, h Header) error {
@@ -187,10 +150,6 @@ func ReadHeader(r io.Reader) (Header, error) {
 	return h, nil
 }
 
-// readBounded reads exactly n bytes, refusing n above max, and without
-// allocating n bytes up front: memory grows only as real data arrives, so a
-// header that lies about a length can't make us allocate more than the file
-// actually holds.
 func readBounded(r io.Reader, n, max uint32, what string) ([]byte, error) {
 	if n > max {
 		return nil, fmt.Errorf("corrupted archive: %s length %d exceeds limit %d", what, n, max)
@@ -205,13 +164,10 @@ func readBounded(r io.Reader, n, max uint32, what string) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// ReadBounded is the exported form of readBounded for other packages.
 func ReadBounded(r io.Reader, n, max uint32, what string) ([]byte, error) {
 	return readBounded(r, n, max, what)
 }
 
-// WriteString/ReadString: a length-prefixed UTF-8 string, used throughout
-// the footer formats for file names.
 func WriteString(w io.Writer, s string) error {
 	if len(s) > MaxStringSize {
 		return fmt.Errorf("name too long (%d bytes, max %d): %.60s...", len(s), MaxStringSize, s)

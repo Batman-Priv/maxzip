@@ -10,8 +10,6 @@ import (
 	"gitlab.com/specterog/maxzip/internal/cryptoutil"
 )
 
-// BlockOutput describes a finished, on-disk (temp file) compressed block of
-// unique chunks, ready to be copied into the archive by the caller.
 type BlockOutput struct {
 	TempPath   string
 	PayloadLen int64
@@ -23,18 +21,6 @@ type nopWC struct{ io.Writer }
 
 func (nopWC) Close() error { return nil }
 
-// BlockBuilder accumulates unique chunks into a temp file, compressing (and
-// optionally encrypting) them as one shared stream - the same "solid"
-// principle as internal/block, just applied to chunks instead of whole
-// files. Chunk discovery must stay sequential (each new chunk's uniqueness
-// depends on every chunk seen before it), so unlike file-mode blocks this
-// isn't built in parallel across blocks.
-// BlockBuilder never applies a shared dictionary: unlike internal/block's
-// solid tar blocks (one clean boundary per block), a chunked block's
-// stored chunk offsets/lengths are relative to the block's own content
-// only - prepending dictionary bytes here would shift every offset and
-// break chunk reconstruction. Dictionary support is scoped to normal
-// (non-dedup, non-big-file) mode only.
 type BlockBuilder struct {
 	algo   compressor.Algo
 	level  string
@@ -50,7 +36,6 @@ type BlockBuilder struct {
 	uncompSize  int64
 }
 
-// aad is bound into every encrypted chunk of the builder's blocks.
 func NewBlockBuilder(algo compressor.Algo, level string, aead *cryptoutil.Cipher, aad []byte, targetSize int64) (*BlockBuilder, error) {
 	b := &BlockBuilder{algo: algo, level: level, aead: aead, aad: aad, target: targetSize}
 	if err := b.reset(); err != nil {
@@ -88,8 +73,6 @@ func (b *BlockBuilder) reset() error {
 	return nil
 }
 
-// WriteChunk writes one chunk into the current block and returns its offset
-// within the block's decompressed stream.
 func (b *BlockBuilder) WriteChunk(data []byte) (int64, error) {
 	offset := b.uncompSize
 	if _, err := b.cw.Write(data); err != nil {
@@ -101,8 +84,6 @@ func (b *BlockBuilder) WriteChunk(data []byte) (int64, error) {
 
 func (b *BlockBuilder) ShouldFlush() bool { return b.uncompSize >= b.target }
 
-// Finish closes out the current block and prepares the builder for the next
-// one. Returns (nil, nil) if the block is empty (nothing to flush).
 func (b *BlockBuilder) Finish() (*BlockOutput, error) {
 	if b.uncompSize == 0 {
 		os.Remove(b.tmpPath)

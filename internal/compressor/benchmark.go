@@ -11,11 +11,6 @@ type BenchResult struct {
 	Duration time.Duration
 }
 
-// AutoSelect compresses a sample with every real codec and picks one
-// according to optimize ("size", "speed", or "balanced" - default "size").
-// This is a simple, honest heuristic run once per archive on a
-// representative sample - not an exhaustive search, and not re-run per
-// block.
 func AutoSelect(sample []byte, level string, optimize string) (Algo, map[Algo]BenchResult) {
 	candidates := []Algo{Zstd, XZ, Deflate, LZ4, Brotli}
 	results := make(map[Algo]BenchResult, len(candidates))
@@ -37,7 +32,7 @@ func AutoSelect(sample []byte, level string, optimize string) (Algo, map[Algo]Be
 	}
 
 	if len(results) == 0 {
-		return Zstd, results // safe fallback
+		return Zstd, results 
 	}
 
 	var best Algo
@@ -49,7 +44,7 @@ func AutoSelect(sample []byte, level string, optimize string) (Algo, map[Algo]Be
 			score = float64(r.Duration.Microseconds())
 		case "balanced":
 			score = float64(r.Size) * (1 + r.Duration.Seconds())
-		default: // "size"
+		default: 
 			score = float64(r.Size)
 		}
 		if bestScore < 0 || score < bestScore {

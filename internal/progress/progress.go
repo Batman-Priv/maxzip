@@ -1,5 +1,4 @@
-// Package progress renders a single-line, in-place progress bar for
-// long-running pack/unpack operations.
+
 package progress
 
 import (
@@ -12,10 +11,6 @@ import (
 	"time"
 )
 
-// Bar is a thread-safe progress indicator printed to stderr (never stdout,
-// so it can't pollute output that might be piped or redirected). Multiple
-// goroutines may call Add concurrently - safe to use from parallel block
-// workers.
 type Bar struct {
 	label   string
 	total   int64
@@ -26,14 +21,10 @@ type Bar struct {
 	start   time.Time
 }
 
-// New creates a bar for `total` bytes of work. total may be 0 (e.g. an
-// empty archive); the bar just won't show a meaningful percentage then.
 func New(total int64, label string) *Bar {
 	return &Bar{label: label, total: total, stop: make(chan struct{}), stopped: make(chan struct{}), start: time.Now()}
 }
 
-// Add records n more bytes of completed work. Safe to call on a nil *Bar
-// (no-op), so callers don't need to special-case "no bar" paths.
 func (b *Bar) Add(n int64) {
 	if b == nil {
 		return
@@ -41,9 +32,6 @@ func (b *Bar) Add(n int64) {
 	atomic.AddInt64(&b.done, n)
 }
 
-// Complete marks all remaining work as done. Call it only after the whole
-// operation succeeded (rounding/bookkeeping differences can otherwise leave
-// the bar at 99.x%).
 func (b *Bar) Complete() {
 	if b == nil {
 		return
@@ -53,9 +41,6 @@ func (b *Bar) Complete() {
 	}
 }
 
-// Wrap returns a reader that reports every byte read through it to the bar,
-// so progress moves while a big file is still being processed instead of
-// only after it finishes. Safe on a nil *Bar (returns r unchanged).
 func (b *Bar) Wrap(r io.Reader) io.Reader {
 	if b == nil {
 		return r
@@ -63,7 +48,6 @@ func (b *Bar) Wrap(r io.Reader) io.Reader {
 	return &countReader{r: r, fn: b.Add}
 }
 
-// CountReader is like Wrap but takes any callback (nil callback = no-op).
 func CountReader(r io.Reader, fn func(int64)) io.Reader {
 	if fn == nil {
 		return r
@@ -84,7 +68,6 @@ func (c *countReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// Start begins printing updates in the background, roughly 6 times/sec.
 func (b *Bar) Start() {
 	if b == nil {
 		return
@@ -104,13 +87,6 @@ func (b *Bar) Start() {
 	}()
 }
 
-// Finish stops the background updater, prints one last line reflecting
-// however much work was actually completed (NOT forced to 100% - if the
-// caller stopped early because of an error, the bar honestly shows that),
-// and moves to a new line so following output doesn't overwrite it.
-// Safe to call more than once (e.g. once explicitly before printing a
-// final summary, and once more via defer as a safety net on error paths) -
-// only the first call does anything.
 func (b *Bar) Finish() {
 	if b == nil {
 		return

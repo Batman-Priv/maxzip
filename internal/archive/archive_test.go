@@ -57,8 +57,7 @@ func TestTamperedEncryptedArchiveFails(t *testing.T) {
 			detected++
 		}
 	}
-	// A flipped bit may land in a harmless spot (e.g. the unused comment
-	// flag byte area) only if the header checksum misses it - it must not.
+	
 	if detected != trials {
 		t.Fatalf("only %d/%d single-bit corruptions detected", detected, trials)
 	}
@@ -75,7 +74,7 @@ func TestTamperedUnencryptedArchiveFailsUnpackNoPanic(t *testing.T) {
 		}
 		p := filepath.Join(t.TempDir(), "bad.mzp")
 		os.WriteFile(p, bad, 0o644)
-		// Must return (error or nil), never panic or hang.
+		
 		_ = Unpack(UnpackOptions{Input: p, Output: t.TempDir(), Verify: true})
 		_, _ = ListEntries(p, "")
 	}
@@ -94,7 +93,7 @@ func TestTruncatedArchiveFails(t *testing.T) {
 }
 
 func TestHeaderLengthBombRejected(t *testing.T) {
-	// magic + version + dict flag + a 4 GiB dictionary length, no data.
+	
 	hdr := append([]byte(format.Magic), format.FormatVersion, format.FlagDict, 0xFF, 0xFF, 0xFF, 0xFF)
 	if _, err := format.ReadHeader(bytes.NewReader(hdr)); err == nil {
 		t.Fatal("4 GiB dictionary length accepted")

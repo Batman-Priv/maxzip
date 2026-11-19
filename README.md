@@ -15,6 +15,8 @@ maxzip unpack -i backup.mzp -o ./restored
 
 - [Why maxzip](#why-maxzip)
 - [How it compares](#how-it-compares)
+- [Benchmark](#benchmark)
+- [Choosing a preset](#choosing-a-preset)
 - [Install](#install)
 - [Quick start](#quick-start)
 - [Features](#features)
@@ -30,7 +32,7 @@ maxzip unpack -i backup.mzp -o ./restored
 
 Most "better than zip" tools stop at picking a stronger codec. maxzip goes further: it doesn't *guess* what will compress well — it tests, compares, and keeps whichever result is actually smaller. That single design principle, applied consistently, is what closes the gap with (and often beats) RAR and 7-Zip on real-world data:
 
-- **It never trusts a heuristic when it can just check.** Old-school "smart" compression skips files by file extension alone — meaning a JPEG or APK that actually *does* have a few percent of recoverable slack (build tools rarely compress at maximum, JPEG Huffman tables are rarely optimal) gets silently stored raw and that slack is lost forever. at `-level better`/`best` (and so `-preset best`/`ultra`) maxzip runs the real algorithm on every file type except video/audio, and only stores raw when compression genuinely doesn't help. At faster levels a quick zstd probe skips the work on files that barely shrink.
+- **It never trusts a heuristic when it can just check.** Old-school "smart" compression skips files by file extension alone — meaning a JPEG or APK that actually *does* have a few percent of recoverable slack (build tools rarely compress at maximum, JPEG Huffman tables are rarely optimal) gets silently stored raw and that slack is lost forever. At `-level better`/`best` (and so `-preset best`/`ultra`) maxzip runs the real algorithm on every file type except video/audio, and only stores raw when compression genuinely doesn't help. At faster levels a quick zstd probe skips the work on files that barely shrink.
 - **It never lets an optimization make things worse.** Dictionaries, smart-store heuristics, and algorithm choices are all built, tested, and compared against the alternative before being committed to the archive. If a dictionary would bloat a block instead of shrinking it, maxzip throws it away and keeps the plain result. You should never see an archive that's *bigger* than doing nothing.
 - **It's built to be verified, not just trusted.** Every block, every file, the footer index, and the header each carry their own checksum. A one-command self-test suite (`maxzip selftest`) round-trips real data through every mode and diffs the result byte-for-byte — because a claim of correctness is only as good as the test that backs it up.
 
@@ -56,6 +58,67 @@ Most "better than zip" tools stop at picking a stronger codec. maxzip goes furth
 
 maxzip won't always win — RAR and 7-Zip are mature, heavily-optimized tools with decades of tuning. But on general-purpose data, and especially on the "should compress a little but nobody bothered to check" files that make up most real backups (APKs, office documents, loosely-compressed media), maxzip's test-then-decide approach tends to close or beat the gap.
 
+## Benchmark
+
+These are real measurements from the author's own testing, not a synthetic suite. They are **one dataset on one machine** — treat them as an illustration of the trade-offs, not as a general ranking. Please run your own data (see "Reproduce it" below).
+
+**Test setup:** a 23 MB folder, packed on an Android phone (Termux). RAR was run with its default settings for comparison.
+
+| Tool / command | Output size | vs. RAR | Speed |
+|---|---:|---:|---|
+| RAR | ≈ 9.60 MB | — | — |
+| maxzip `-algo xz -level best -block-size 4MB` | 9,636,611 B (≈ 9.64 MB) | ≈ +0.4 % | fast |
+| maxzip `-preset ultra -block-size 5MB` | **9,508,158 B (≈ 9.51 MB)** | **≈ −1.0 %** | **slow** |
+
+What the numbers say:
+
+- `-preset ultra` produced the smallest archive, about 1 % below RAR and about 1.3 % below xz.
+- In this run `-algo auto` selected **brotli at level 11**: packing the same folder with `-algo brotli -level best` produced a byte-for-byte identical size (9,508,158 B). The slow part of `ultra` is therefore brotli-11, not something specific to maxzip's container.
+- The xz run was clearly faster and landed within half a percent of RAR. For most uses that is the better trade; `ultra` is for when the last percent matters more than the time.
+- `-smart aggressive` and block size (4 MB vs 5 MB) did not change the xz result at all (identical byte counts), so the whole difference came from the codec.
+
+Observations on other data types (qualitative, from the same testing):
+
+- **Images:** maxzip came out smaller than both ZIP and RAR.
+- **Video (a folder of three videos, 88 MB total):** slightly smaller than the alternatives, but slow. Already-compressed video leaves only a few percent to recover, which is rarely worth `ultra`-level effort — see [Choosing a preset](#choosing-a-preset).
+- **MP3 music:** RAR came out ahead. MP3 is already lossy-compressed; no lossless archiver has much to gain, so differences are tiny and come from container overhead and per-file metadata.
+
+Timings were not recorded for the table above, so none are claimed. If you publish your own numbers, please include the machine, core count and wall-clock time.
+
+### Reproduce it
+
+```bash
+# Smallest output (slow): auto-select + best level
+time maxzip pack -i ./folder -o a.mzp -preset ultra -block-size 5MB
+
+# Fast and close to RAR
+time maxzip pack -i ./folder -o b.mzp -algo xz -level best -block-size 4MB
+
+# Isolate what `ultra` actually picked
+time maxzip pack -i ./folder -o c.mzp -algo brotli -level best -block-size 5MB
+```
+
+`pack` prints a line like `auto-select (size): ... -> chosen brotli` when `-algo auto` is used, with the size and time of every candidate on a 2 MB sample.
+
+## Choosing a preset
+
+| Preset | Codec / level | Meant for |
+|---|---|---|
+| `fast` | zstd, fastest | Speed first; backups you want done now. |
+| `balanced` | zstd, default | Good ratio at high speed. |
+| `best` | xz, best, 128 MB blocks, smart aggressive | Small output; moderate time. |
+| `ultra` | auto-select, best, smart aggressive, dictionary auto, 128 MB blocks | Smallest output; slowest. |
+
+Practical tips:
+
+- **`ultra` is slow by design.** At level `best`, xz and brotli try many alternatives per position, and they are pure-Go implementations. Brotli-11 in particular runs well below 1 MB/s per thread.
+- **xz and brotli compress one block on one thread.** A block is the unit of parallelism, so a folder that fits in one block uses one CPU core no matter how many you have. Lower `-block-size` (for example `-block-size 4MB`) so there are several blocks to spread over your cores. The cost is a slightly larger archive, because blocks cannot see each other's data.
+- **A single file is never split across blocks** (unless it exceeds `-big-file-threshold`), so one large file is bounded by one thread.
+- **Trade ratio for speed with `-level better`**, which is much faster than `best` for xz and brotli and usually costs a few percent in size.
+- **Skip the auto-select cost with an explicit codec.** `-algo auto` benchmarks five codecs on a sample before packing starts; `-algo brotli` or `-algo xz` skips that step.
+- **Media (video/audio):** these blocks gain very little from any codec. Use `-preset fast`/`balanced`, or let maxzip's probe store them raw. When `ultra`/`best` picks xz or brotli, media blocks that survive the probe are compressed with zstd (`better`) instead, because xz/brotli would turn a few percent of gain into minutes.
+- **zstd uses extra cores inside a block** when there are fewer blocks than workers; xz and brotli cannot.
+
 ## Install
 
 ```bash
@@ -68,7 +131,7 @@ go build .
 ### Direct Install
 
 ```bash
-go install gitlab.com/specterog/maxzip@latest
+go install gitlab.com/specterog/maxzip@v0.1.2
 ```
 
 ## Quick start
@@ -107,6 +170,7 @@ maxzip unpack -i backup.mzp -o ./restored -file "contracts/lease.pdf"
 - Five codecs — zstd, xz, deflate, lz4, brotli — selectable per archive, or let `-algo auto` benchmark all five on a sample and pick the smallest.
 - Solid-block architecture: files are grouped by extension for locality and compressed together in parallel blocks, keeping most of the ratio benefit of a fully solid archive while staying corruption-isolated and individually extractable.
 - Compress-or-store is always decided empirically, per block — never assumed from a file extension. This is what actually closes the gap with RAR on formats like APKs and JPEGs.
+- Already-compressed media (video/audio/archives) is kept in separate, smaller blocks so all CPU cores get work instead of one oversized block.
 - A frequency-scored shared dictionary (`-dict auto`) helps when you're archiving many small, similar files (configs, logs, source trees) — and is automatically discarded per-block if it doesn't pay off.
 - Content-defined chunking deduplication (`-dedup`) for collections with repeated content across files — VM snapshots, versioned backups, redundant project exports.
 - Optional automatic chunking for individual huge files (`-big-file-threshold`), so one enormous file never becomes a single unparallelizable, memory-heavy block.
@@ -123,35 +187,16 @@ maxzip unpack -i backup.mzp -o ./restored -file "contracts/lease.pdf"
 **Usability**
 - Multiple inputs and glob patterns in one command (`-i "*.pdf" -i ./docs`), expanded by maxzip itself so it works identically on Windows (cmd.exe/PowerShell don't expand globs) and Unix shells.
 - Ready-made presets (`-preset fast|balanced|best|ultra`).
-- A live progress bar on `pack` and `unpack`, colored success/error output (respects `NO_COLOR`).
+- A live progress bar on `pack` and `unpack` that advances while data is being compressed, with throughput and ETA; colored success/error output (respects `NO_COLOR`).
 - Symlinks, file permissions, and modification times are preserved.
 - Optional multi-volume splitting for archives that need to span several files.
 - `-delta`: inside a solid block, a file that looks like another version of an earlier file (same extension, same letters in the name once digits/punctuation are dropped — `report_v1.docx`, `report_v2.docx`) is stored as a binary diff against it when that is clearly smaller. Extracting a single file rebuilds its chain in memory.
 - `-preprocess bcj`: x86/x86-64 ELF and PE executables get their CALL/JMP operands rewritten to absolute addresses (the 7-Zip/xz BCJ idea), which compresses noticeably better; other files are untouched.
+- Uncompressed audio (WAV) is treated as compressible, not as already-compressed media; only WEBP and AVI use the RIFF container for incompressible data.
 - Archive comments, viewable without a password.
 - `maxzip list` / `maxzip test` — inspect or verify an archive without ever extracting it.
 
 ## Architecture
-
-```
-cmd/gitlab.com/specterog/maxzip/          CLI entry point (flag parsing only)
-internal/
-  fsutil/            collecting files, symlinks, and empty directories from disk
-  format/            archive header/footer binary layout
-  cryptoutil/        AES-256-GCM encryption, Argon2id key derivation
-  compressor/        zstd/xz/deflate/lz4/brotli + auto-benchmark
-  dictionary/        frequency-scored shared zstd dictionary
-  smart/             detecting whether a file is worth compressing
-  block/             solid-block packing (the normal-mode path)
-  dedup/             content-defined chunking (dedup mode / big files)
-  delta/             rsync-style binary diff engine (used by -delta)
-  preprocess/        byte-delta filter and the x86 BCJ filter
-  volume/            multi-volume split/join
-  progress/          the live progress bar
-  ui/                colored terminal output
-  selftest/          the end-to-end verification suite
-  archive/           ties every package above into Pack / Unpack / List / Test
-```
 
 Every package under `internal/` has exactly one responsibility and depends only on the layers below it — `fsutil`, `format`, `cryptoutil`, `compressor`, `dictionary`, and `volume` have no internal dependencies at all; `archive` is the only package that ties everything together.
 
@@ -170,7 +215,7 @@ Every package under `internal/` has exactly one responsibility and depends only 
 | `-password` | Encrypts the archive (AES-256-GCM). `-password -` reads it from stdin; if the flag is absent, `$MAXZIP_PASSWORD` is used. A password given directly on the command line is visible in the process list and shell history. |
 | `-comment` | Free-text comment, readable later without a password. |
 | `-smart` | `off`, `on`, or `aggressive` — how hard to check before deciding not to compress a file. |
-| `-block-size` | Target uncompressed size per solid block. |
+| `-block-size` | Target uncompressed size per solid block. Smaller blocks = more parallelism for xz/brotli, slightly larger archives. |
 | `-split` | Split into fixed-size volumes (off unless set). |
 | `-dict` | `off` or `auto`. |
 | `-dedup` | Enable content-defined-chunking deduplication. |
@@ -178,7 +223,7 @@ Every package under `internal/` has exactly one responsibility and depends only 
 | `-big-file-threshold` | Auto-chunk single files above this size (off unless set). |
 | `-preprocess` | `off`, `delta` (experimental byte-delta) or `bcj` (x86 executables). |
 | `-delta` / `-delta-max` | Store similar file versions as diffs; largest file considered (default 32MB). Normal mode only. |
-| `-threads` | Parallel block-compression workers. |
+| `-threads` | Parallel block-compression workers (default: all CPU cores). |
 | `-exclude` | Comma-separated glob patterns to skip. |
 | `-verbose` | Print per-block/per-file detail. |
 
@@ -199,7 +244,7 @@ maxzip comment -i archive.mzp
 ## Verifying this build
 
 ```bash
-go build -o maxzip ./cmd/maxzip
+go build .
 maxzip selftest
 ```
 
@@ -209,12 +254,15 @@ maxzip selftest
 
 Said plainly, not buried in fine print:
 
+- **Speed at the highest levels.** xz and brotli come from pure-Go libraries, which are several times slower per core than the C reference implementations, and `-level best` (especially brotli-11) is slow in any language. Neither codec can use several threads inside one block, so parallelism comes only from having several blocks. `-preset ultra` additionally benchmarks five codecs on a 2 MB sample before it starts, and may build each block twice when a zstd dictionary is in play.
+- **A file is never split across blocks** (except through `-big-file-threshold` chunking), so one very large file is limited to one thread for xz/brotli.
+- **Auto-select decides once per archive,** from the first ~2 MB of input, not per file type or per block.
 - **No real COVER dictionary trainer.** `-dict auto` uses a frequency-scored heuristic, not zstd's official suffix-array-based training algorithm.
-- **Only two preprocessors exist: the byte-delta filter and x86 BCJ.** ARM/ARM64/PowerPC executable filters and numeric-data transforms are not implemented.
+- **Only two preprocessors exist: the byte-delta filter and x86 BCJ.** ARM/ARM64/PowerPC executable filters, audio-aware filters for WAV/PCM, and numeric-data transforms are not implemented.
 - **`-delta` is per solid block and per file.** A version chain is only found when the versions land in the same block; files larger than `-delta-max` are skipped; it is ignored with `-dedup`.
 - **Each block is read into memory to extract it** (default block size 64MB), so memory use is about one block per extraction.
 - **In `-dedup` mode the encrypted blocks are bound to their role but not to their position**; swapping two blocks is still caught by the authenticated index (file hashes), just later.
-- **Lossless recompression of already-compressed media (JPEG, video) isn't attempted.** No general-purpose archiver can meaningfully shrink an H.264 stream or a JPEG without either specialized entropy-recoding (JPEG) or lossy re-encoding (video) — both are out of scope for an archiver.
+- **Lossless recompression of already-compressed media (JPEG, MP3, video) isn't attempted.** No general-purpose archiver can meaningfully shrink an H.264 stream, an MP3 or a JPEG without either specialized entropy-recoding (JPEG) or lossy re-encoding (video, audio) — both are out of scope for an archiver.
 - **Symlink restoration on Windows** typically requires Developer Mode or an elevated process, per Go's standard library behavior — this is a Windows platform constraint, not a maxzip-specific limitation.
 - **Archive format is not stable across versions yet.** Each format revision so far has been a breaking change; don't rely on long-term archival compatibility until the format is explicitly versioned as stable.
 

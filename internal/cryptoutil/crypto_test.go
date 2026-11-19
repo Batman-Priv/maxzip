@@ -45,7 +45,7 @@ func decrypt(c *Cipher, aad, ct []byte) ([]byte, error) {
 
 func TestRoundTripSizes(t *testing.T) {
 	c := testCipher(t)
-	// 0, small, exactly one chunk, one chunk + 1, exactly two chunks, odd.
+	
 	for _, n := range []int{0, 1, 1000, chunkPlainMax, chunkPlainMax + 1, 2 * chunkPlainMax, 2*chunkPlainMax + 17} {
 		data := make([]byte, n)
 		rand.Read(data)
@@ -88,7 +88,6 @@ func TestTruncationAndReorderDetected(t *testing.T) {
 	rand.Read(data)
 	ct := encrypt(t, c, nil, data)
 
-	// Drop the final chunk (cut at the end of chunk #2).
 	off := streamIDSize
 	for i := 0; i < 2; i++ {
 		off += 4 + int(binary.BigEndian.Uint32(ct[off:]))
@@ -97,7 +96,6 @@ func TestTruncationAndReorderDetected(t *testing.T) {
 		t.Fatal("dropping the final chunk was not detected")
 	}
 
-	// Swap chunk 0 and chunk 1 (same length, so only position binding catches it).
 	l0 := 4 + int(binary.BigEndian.Uint32(ct[streamIDSize:]))
 	s1 := streamIDSize + l0
 	l1 := 4 + int(binary.BigEndian.Uint32(ct[s1:]))
@@ -119,8 +117,6 @@ func TestOversizedChunkLengthRejected(t *testing.T) {
 	}
 }
 
-// Two streams under one master key must never share a key/nonce: the stream
-// IDs (and so the sub-keys) must differ.
 func TestStreamsUseDistinctKeys(t *testing.T) {
 	c := testCipher(t)
 	seen := map[string]bool{}

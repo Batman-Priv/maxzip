@@ -2,27 +2,6 @@ package preprocess
 
 import "encoding/binary"
 
-// x86 "BCJ" filter: machine code is full of CALL (E8) and JMP (E9)
-// instructions whose operand is a RELATIVE displacement, so the same target
-// function appears as a different 4-byte number at every call site. The
-// filter rewrites those operands to ABSOLUTE addresses, which repeat
-// exactly and compress far better. It is the same idea as the BCJ filters in
-// 7-Zip/xz, and, like them, only a heuristic about WHICH bytes are
-// instructions: a stray E8/E9 inside data is converted too, but the
-// transform is an exact bijection either way, so decoding always restores
-// the original bytes - the filter can only fail to help, never corrupt.
-//
-// Reversibility is the delicate part: converting one operand rewrites bytes
-// that an earlier, unconverted E8/E9 looked at when it made its own
-// decision, so a naive filter is NOT invertible (the unit test with dense
-// E8/E9 data catches exactly that). This implementation therefore follows
-// the carefully designed state machine used by the xz/LZMA SDK x86 filter
-// (a small "previous opcodes" mask decides when a candidate may be
-// converted, and an inner loop keeps the converted value inside the
-// sign-extension range), which is a true bijection; the tests round-trip
-// millions of adversarial bytes and a real binary.
-
-// MaxBCJSize bounds the files BCJ will buffer in memory.
 const MaxBCJSize = 64 << 20
 
 var (
@@ -32,10 +11,8 @@ var (
 
 func test86MSByte(b byte) bool { return b == 0x00 || b == 0xFF }
 
-// BCJEncode transforms b in place.
 func BCJEncode(b []byte) { bcj(b, true) }
 
-// BCJDecode reverses BCJEncode in place.
 func BCJDecode(b []byte) { bcj(b, false) }
 
 func bcj(buf []byte, encode bool) {
@@ -43,7 +20,7 @@ func bcj(buf []byte, encode bool) {
 		return
 	}
 	var prevMask uint32
-	prevPos := ^uint32(4) // == 0-5 mod 2^32, as in the reference: nothing seen yet
+	prevPos := ^uint32(4) 
 	limit := len(buf) - 5
 	pos := 0
 	for pos <= limit {
@@ -98,17 +75,14 @@ func bcj(buf []byte, encode bool) {
 	}
 }
 
-// LooksLikeX86Executable reports whether the first bytes of a file look
-// like a PE ("MZ") or ELF executable/library - the only files BCJ is tried
-// on, so it never wastes time (or risks anything) on ordinary data.
 func LooksLikeX86Executable(head []byte) bool {
 	if len(head) >= 2 && head[0] == 'M' && head[1] == 'Z' {
 		return true
 	}
 	if len(head) >= 20 && string(head[:4]) == "\x7fELF" {
-		// e_machine at offset 18 (little endian): 3 = x86, 62 = x86-64.
+		
 		m := binary.LittleEndian.Uint16(head[18:20])
-		if head[5] == 2 { // big-endian ELF
+		if head[5] == 2 { 
 			m = binary.BigEndian.Uint16(head[18:20])
 		}
 		return m == 3 || m == 62

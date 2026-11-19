@@ -63,7 +63,7 @@ func TestWriteThroughSymlinkDirIsRefused(t *testing.T) {
 	outside := filepath.Join(base, "outside")
 	os.Mkdir(root, 0o755)
 	os.Mkdir(outside, 0o755)
-	// A previous entry planted a directory symlink pointing outside.
+	
 	if err := os.Symlink(outside, filepath.Join(root, "link")); err != nil {
 		t.Skip("symlinks unavailable:", err)
 	}
@@ -99,7 +99,7 @@ func TestSizeCapStopsDecompressionBomb(t *testing.T) {
 	root := t.TempDir()
 	content := bytes.Repeat([]byte("A"), 4096)
 	hdr := &tar.Header{Name: "bomb", Size: int64(len(content)), Mode: 0o644}
-	// The (authenticated) index claims 10 bytes; the stream has 4096.
+	
 	err := writeExtractedFile(hdr, bytes.NewReader(content), newDeltaState(), root, sha256.Sum256(content), 10, true)
 	if err == nil {
 		t.Fatal("oversized stream accepted")
