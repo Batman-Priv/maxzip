@@ -131,28 +131,6 @@ maxzip unpack -i backup.mzp -o ./restored -file "contracts/lease.pdf"
 - Archive comments, viewable without a password.
 - `maxzip list` / `maxzip test` — inspect or verify an archive without ever extracting it.
 
-## Architecture
-
-```
-cmd/gitlab.com/specterog/maxzip/          CLI entry point (flag parsing only)
-internal/
-  fsutil/            collecting files, symlinks, and empty directories from disk
-  format/            archive header/footer binary layout
-  cryptoutil/        AES-256-GCM encryption, Argon2id key derivation
-  compressor/        zstd/xz/deflate/lz4/brotli + auto-benchmark
-  dictionary/        frequency-scored shared zstd dictionary
-  smart/             detecting whether a file is worth compressing
-  block/             solid-block packing (the normal-mode path)
-  dedup/             content-defined chunking (dedup mode / big files)
-  delta/             rsync-style binary diff engine (used by -delta)
-  preprocess/        byte-delta filter and the x86 BCJ filter
-  volume/            multi-volume split/join
-  progress/          the live progress bar
-  ui/                colored terminal output
-  selftest/          the end-to-end verification suite
-  archive/           ties every package above into Pack / Unpack / List / Test
-```
-
 Every package under `internal/` has exactly one responsibility and depends only on the layers below it — `fsutil`, `format`, `cryptoutil`, `compressor`, `dictionary`, and `volume` have no internal dependencies at all; `archive` is the only package that ties everything together.
 
 ## Command reference
