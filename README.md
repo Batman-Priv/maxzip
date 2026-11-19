@@ -56,7 +56,7 @@ Most "better than zip" tools stop at picking a stronger codec. maxzip goes furth
 
 maxzip won't always win — RAR and 7-Zip are mature, heavily-optimized tools with decades of tuning. But on general-purpose data, and especially on the "should compress a little but nobody bothered to check" files that make up most real backups (APKs, office documents, loosely-compressed media), maxzip's test-then-decide approach tends to close or beat the gap.
 
-## Clone & Build
+## Install
 
 ```bash
 git clone https://gitlab.com/specterog/maxzip
@@ -65,7 +65,7 @@ go mod tidy
 go build .
 ```
 
-## Direct Install
+### Direct Install
 
 ```bash
 go install gitlab.com/specterog/maxzip@latest
@@ -223,29 +223,4 @@ Said plainly, not buried in fine print:
 ```bash
 go test ./...        # unit tests: crypto, path safety, tamper/truncation, BCJ, delta
 maxzip selftest      # end-to-end round trips through every mode
-```
-
-## Project layout
-
-```
-gitlab.com/specterog/maxzip/
-├── go.mod
-├── README.md
-├── cmd/gitlab.com/specterog/maxzip/main.go
-└── internal/
-    ├── archive/       (pack.go, unpack.go)
-    ├── block/
-    ├── compressor/    (compressor.go, benchmark.go)
-    ├── cryptoutil/
-    ├── dedup/         (chunker.go, blockbuilder.go)
-    ├── delta/
-    ├── dictionary/
-    ├── format/
-    ├── fsutil/
-    ├── preprocess/
-    ├── progress/
-    ├── selftest/
-    ├── smart/
-    ├── ui/
-    └── volume/
 ```
