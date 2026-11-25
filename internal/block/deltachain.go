@@ -9,8 +9,8 @@ import (
 	"strings"
 	"unicode"
 
-	"gitlab.com/specterog/maxzip/internal/delta"
-	"gitlab.com/specterog/maxzip/internal/fsutil"
+	"github.com/Batman-Priv/maxzip/internal/delta"
+	"github.com/Batman-Priv/maxzip/internal/fsutil"
 )
 
 const (

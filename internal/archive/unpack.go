@@ -12,14 +12,14 @@ import (
 	"sort"
 	"time"
 
-	"gitlab.com/specterog/maxzip/internal/block"
-	"gitlab.com/specterog/maxzip/internal/compressor"
-	"gitlab.com/specterog/maxzip/internal/cryptoutil"
-	"gitlab.com/specterog/maxzip/internal/format"
-	"gitlab.com/specterog/maxzip/internal/preprocess"
-	"gitlab.com/specterog/maxzip/internal/progress"
-	"gitlab.com/specterog/maxzip/internal/ui"
-	"gitlab.com/specterog/maxzip/internal/volume"
+	"github.com/Batman-Priv/maxzip/internal/block"
+	"github.com/Batman-Priv/maxzip/internal/compressor"
+	"github.com/Batman-Priv/maxzip/internal/cryptoutil"
+	"github.com/Batman-Priv/maxzip/internal/format"
+	"github.com/Batman-Priv/maxzip/internal/preprocess"
+	"github.com/Batman-Priv/maxzip/internal/progress"
+	"github.com/Batman-Priv/maxzip/internal/ui"
+	"github.com/Batman-Priv/maxzip/internal/volume"
 )
 
 type UnpackOptions struct {

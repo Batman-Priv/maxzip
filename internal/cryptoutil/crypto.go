@@ -71,7 +71,7 @@ func NewCipher(key []byte) (*Cipher, error) {
 
 func (c *Cipher) streamAEAD(id []byte) (cipher.AEAD, error) {
 	mac := hmac.New(sha256.New, c.master)
-	mac.Write([]byte("gitlab.com/specterog/maxzip/stream-key/v1"))
+	mac.Write([]byte("github.com/Batman-Priv/maxzip/stream-key/v1"))
 	mac.Write(id)
 	block, err := aes.NewCipher(mac.Sum(nil))
 	if err != nil {

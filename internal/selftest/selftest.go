@@ -10,11 +10,11 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"gitlab.com/specterog/maxzip/internal/archive"
-	"gitlab.com/specterog/maxzip/internal/compressor"
-	"gitlab.com/specterog/maxzip/internal/delta"
-	"gitlab.com/specterog/maxzip/internal/smart"
-	"gitlab.com/specterog/maxzip/internal/ui"
+	"github.com/Batman-Priv/maxzip/internal/archive"
+	"github.com/Batman-Priv/maxzip/internal/compressor"
+	"github.com/Batman-Priv/maxzip/internal/delta"
+	"github.com/Batman-Priv/maxzip/internal/smart"
+	"github.com/Batman-Priv/maxzip/internal/ui"
 )
 
 type scenario struct {

@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 
-	"gitlab.com/specterog/maxzip/internal/block"
-	"gitlab.com/specterog/maxzip/internal/delta"
+	"github.com/Batman-Priv/maxzip/internal/block"
+	"github.com/Batman-Priv/maxzip/internal/delta"
 )
 
 type deltaState struct {

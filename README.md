@@ -122,7 +122,7 @@ Practical tips:
 ## Install
 
 ```bash
-git clone https://gitlab.com/specterog/maxzip
+git clone https://github.com/Batman-Priv/maxzip
 cd maxzip
 go mod tidy
 go build .
@@ -131,7 +131,7 @@ go build .
 ### Direct Install
 
 ```bash
-go install gitlab.com/specterog/maxzip@latest
+go install github.com/Batman-Priv/maxzip@latest
 ```
 
 ## Quick start

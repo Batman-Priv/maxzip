@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"gitlab.com/specterog/maxzip/internal/ui"
+	"github.com/Batman-Priv/maxzip/internal/ui"
 )
 
 type FileRef struct {

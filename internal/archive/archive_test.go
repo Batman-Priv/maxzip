@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"gitlab.com/specterog/maxzip/internal/compressor"
-	"gitlab.com/specterog/maxzip/internal/format"
-	"gitlab.com/specterog/maxzip/internal/smart"
+	"github.com/Batman-Priv/maxzip/internal/compressor"
+	"github.com/Batman-Priv/maxzip/internal/format"
+	"github.com/Batman-Priv/maxzip/internal/smart"
 )
 
 func makeTree(t *testing.T) string {

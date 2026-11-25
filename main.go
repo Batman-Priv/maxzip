@@ -9,12 +9,12 @@ import (
 	"runtime"
 	"strings"
 
-	"gitlab.com/specterog/maxzip/internal/archive"
-	"gitlab.com/specterog/maxzip/internal/compressor"
-	"gitlab.com/specterog/maxzip/internal/selftest"
-	"gitlab.com/specterog/maxzip/internal/smart"
-	"gitlab.com/specterog/maxzip/internal/ui"
-	"gitlab.com/specterog/maxzip/internal/volume"
+	"github.com/Batman-Priv/maxzip/internal/archive"
+	"github.com/Batman-Priv/maxzip/internal/compressor"
+	"github.com/Batman-Priv/maxzip/internal/selftest"
+	"github.com/Batman-Priv/maxzip/internal/smart"
+	"github.com/Batman-Priv/maxzip/internal/ui"
+	"github.com/Batman-Priv/maxzip/internal/volume"
 )
 
 type stringList []string

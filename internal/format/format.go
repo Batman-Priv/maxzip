@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"io"
 
-	"gitlab.com/specterog/maxzip/internal/cryptoutil"
+	"github.com/Batman-Priv/maxzip/internal/cryptoutil"
 )
 
 const (

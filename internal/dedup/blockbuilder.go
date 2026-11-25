@@ -6,8 +6,8 @@ import (
 	"io"
 	"os"
 
-	"gitlab.com/specterog/maxzip/internal/compressor"
-	"gitlab.com/specterog/maxzip/internal/cryptoutil"
+	"github.com/Batman-Priv/maxzip/internal/compressor"
+	"github.com/Batman-Priv/maxzip/internal/cryptoutil"
 )
 
 type BlockOutput struct {

@@ -4,17 +4,17 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"gitlab.com/specterog/maxzip/internal/cryptoutil"
-	"gitlab.com/specterog/maxzip/internal/format"
+	"github.com/Batman-Priv/maxzip/internal/cryptoutil"
+	"github.com/Batman-Priv/maxzip/internal/format"
 )
 
 var (
-	aadChunkBlock = []byte("gitlab.com/specterog/maxzip/chunk-block")
-	aadFooter     = []byte("gitlab.com/specterog/maxzip/footer")
+	aadChunkBlock = []byte("github.com/Batman-Priv/maxzip/chunk-block")
+	aadFooter     = []byte("github.com/Batman-Priv/maxzip/footer")
 )
 
 func blockAAD(index uint32) []byte {
-	b := []byte("gitlab.com/specterog/maxzip/block:")
+	b := []byte("github.com/Batman-Priv/maxzip/block:")
 	var n [4]byte
 	binary.BigEndian.PutUint32(n[:], index)
 	return append(b, n[:]...)

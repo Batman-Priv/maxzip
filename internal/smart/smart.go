@@ -11,7 +11,7 @@ import (
 
 	"github.com/klauspost/compress/zstd"
 
-	"gitlab.com/specterog/maxzip/internal/fsutil"
+	"github.com/Batman-Priv/maxzip/internal/fsutil"
 )
 
 type Mode string

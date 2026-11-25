@@ -11,12 +11,12 @@ import (
 	"sort"
 	"strings"
 
-	"gitlab.com/specterog/maxzip/internal/compressor"
-	"gitlab.com/specterog/maxzip/internal/cryptoutil"
-	"gitlab.com/specterog/maxzip/internal/fsutil"
-	"gitlab.com/specterog/maxzip/internal/preprocess"
-	"gitlab.com/specterog/maxzip/internal/progress"
-	"gitlab.com/specterog/maxzip/internal/smart"
+	"github.com/Batman-Priv/maxzip/internal/compressor"
+	"github.com/Batman-Priv/maxzip/internal/cryptoutil"
+	"github.com/Batman-Priv/maxzip/internal/fsutil"
+	"github.com/Batman-Priv/maxzip/internal/preprocess"
+	"github.com/Batman-Priv/maxzip/internal/progress"
+	"github.com/Batman-Priv/maxzip/internal/smart"
 )
 
 type FileMeta struct {
