@@ -15,17 +15,17 @@ import (
 	"sync"
 	"time"
 
-	"maxzip/internal/block"
-	"maxzip/internal/compressor"
-	"maxzip/internal/cryptoutil"
-	"maxzip/internal/dedup"
-	"maxzip/internal/dictionary"
-	"maxzip/internal/format"
-	"maxzip/internal/fsutil"
-	"maxzip/internal/progress"
-	"maxzip/internal/smart"
-	"maxzip/internal/ui"
-	"maxzip/internal/volume"
+	"github.com/Batman-Priv/maxzip/internal/block"
+	"github.com/Batman-Priv/maxzip/internal/compressor"
+	"github.com/Batman-Priv/maxzip/internal/cryptoutil"
+	"github.com/Batman-Priv/maxzip/internal/dedup"
+	"github.com/Batman-Priv/maxzip/internal/dictionary"
+	"github.com/Batman-Priv/maxzip/internal/format"
+	"github.com/Batman-Priv/maxzip/internal/fsutil"
+	"github.com/Batman-Priv/maxzip/internal/progress"
+	"github.com/Batman-Priv/maxzip/internal/smart"
+	"github.com/Batman-Priv/maxzip/internal/ui"
+	"github.com/Batman-Priv/maxzip/internal/volume"
 )
 
 type PackOptions struct {
